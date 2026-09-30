@@ -1,0 +1,49 @@
+{
+  "name": "@johanwistbacka/node-red-contrib-sw-light",
+  "version": "0.1.9",
+  "description": "Home Assistant light control with automatic brightness limits and manual override",
+  "license": "MIT",
+  "keywords": [
+    "node-red",
+    "home-assistant",
+    "light",
+    "adaptive-lighting"
+  ],
+  "engines": {
+    "node": ">=18.2.0"
+  },
+  "node-red": {
+    "version": ">=3.1.1",
+    "nodes": {
+      "sw-light": "nodes/sw-light.js"
+    }
+  },
+  "peerDependencies": {
+    "node-red-contrib-home-assistant-websocket": "0.80.3"
+  },
+  "files": [
+    "nodes/sw-light.js",
+    "nodes/sw-light.html",
+    "lib/controller.js",
+    "lib/targets.js",
+    "lib/light.js",
+    "lib/adaptive.js",
+    "lib/ha-adapter.js",
+    "examples/basic.json",
+    "examples/manual-adaptive.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "docs/labels.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts/check.js"
+  },
+  "author": "Johan Wistbacka",
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

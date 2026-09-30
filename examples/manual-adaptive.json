@@ -1,0 +1,229 @@
+[
+  {
+    "id": "sw-example-manual-adaptive",
+    "type": "tab",
+    "label": "SW Light \u2014 manual and adaptive",
+    "disabled": false,
+    "info": "Development example. Select your own Home Assistant server and light before deployment. No HA credentials are included."
+  },
+  {
+    "id": "sw-example-manual-adaptive-note",
+    "type": "comment",
+    "z": "sw-example-manual-adaptive",
+    "name": "Select HA server + light in SW Light before deploy",
+    "info": "Adaptive Lighting is off by default. Enable the checkbox for automatic OFF to ON; keep the HA profile main switch off. Advanced selection is only needed when discovery is ambiguous or unavailable.",
+    "x": 350,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "sw-example-manual-adaptive-inject-0",
+    "type": "inject",
+    "z": "sw-example-manual-adaptive",
+    "name": "Manual 100%",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      },
+      {
+        "p": "source",
+        "v": "manual",
+        "vt": "str"
+      },
+      {
+        "p": "brightness_pct",
+        "v": "100",
+        "vt": "num"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 120,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-manual-adaptive-inject-1",
+    "type": "inject",
+    "z": "sw-example-manual-adaptive",
+    "name": "Automatic OFF (protected)",
+    "props": [
+      {
+        "p": "action",
+        "v": "off",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 180,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-manual-adaptive-inject-2",
+    "type": "inject",
+    "z": "sw-example-manual-adaptive",
+    "name": "Manual 50%",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      },
+      {
+        "p": "source",
+        "v": "manual",
+        "vt": "str"
+      },
+      {
+        "p": "brightness_pct",
+        "v": "50",
+        "vt": "num"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 240,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-manual-adaptive-inject-3",
+    "type": "inject",
+    "z": "sw-example-manual-adaptive",
+    "name": "Explicit latch",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      },
+      {
+        "p": "source",
+        "v": "manual",
+        "vt": "str"
+      },
+      {
+        "p": "manual_override",
+        "v": "true",
+        "vt": "bool"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 300,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-manual-adaptive-inject-4",
+    "type": "inject",
+    "z": "sw-example-manual-adaptive",
+    "name": "Release latch",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      },
+      {
+        "p": "source",
+        "v": "manual",
+        "vt": "str"
+      },
+      {
+        "p": "manual_override",
+        "v": "false",
+        "vt": "bool"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 360,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-manual-adaptive-light",
+    "type": "sw-light",
+    "z": "sw-example-manual-adaptive",
+    "name": "SW Light",
+    "server": "",
+    "entityId": "",
+    "x": 460,
+    "y": 210,
+    "wires": [
+      [
+        "sw-example-manual-adaptive-result"
+      ],
+      [
+        "sw-example-manual-adaptive-events"
+      ]
+    ],
+    "action": "msg",
+    "overrideThreshold": 98
+  },
+  {
+    "id": "sw-example-manual-adaptive-result",
+    "type": "debug",
+    "z": "sw-example-manual-adaptive",
+    "name": "result",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 710,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sw-example-manual-adaptive-events",
+    "type": "debug",
+    "z": "sw-example-manual-adaptive",
+    "name": "events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 710,
+    "y": 260,
+    "wires": []
+  }
+]

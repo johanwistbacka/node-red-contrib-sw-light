@@ -1,0 +1,168 @@
+<script type="text/javascript">
+(function () {
+    const ranges = { brightnessPct: [1,100], autoMaxPct: [1,100], minPct: [1,100], overrideThreshold: [1,100], transitionOn: [0,3600], transitionOff: [0,3600], kelvin: [1000,40000], mired: [25,1000] };
+    function numeric(key) {
+        return function (value) {
+            const n = Number(value), range = ranges[key];
+            if (String(value).trim() === '' || !Number.isFinite(n) || n < range[0] || n > range[1]) return false;
+            if (key === 'kelvin' && !Number.isInteger(n)) return false;
+            if (['brightnessPct','autoMaxPct','minPct'].includes(key)) {
+                const read = k => $('#node-input-' + k).length ? Number($('#node-input-' + k).val()) : Number(this[k]);
+                if (!(read('minPct') <= read('brightnessPct') && read('brightnessPct') <= read('autoMaxPct'))) return false;
+            }
+            return true;
+        };
+    }
+    function targetKind(node) {
+        const field = typeof $ === 'function' ? $('#node-input-targetType') : null;
+        return field?.length ? field.val() || node.targetType || 'entity' : node.targetType || 'entity';
+    }
+    RED.nodes.registerType('sw-light', {
+        category: 'home assistant', color: '#c7d7e8', icon: 'font-awesome/fa-lightbulb-o',
+        inputs: 1, outputs: 2, outputLabels: ['result / state', 'events / errors'],
+        paletteLabel: 'SW Light', label: function () { return this.name || 'SW Light'; },
+        defaults: {
+            name: { value: '' }, server: { value: '', type: 'server', required: true },
+            action: { value: 'msg', validate: v => ['on','off','toggle','msg'].includes(v) },
+            targetType: { value: 'entity', validate: v => ['entity','label'].includes(v) },
+            entityId: { value: '', validate: function (v) { return targetKind(this) === 'label' || /^light\.[a-z0-9_]+$/.test(v); } },
+            labelId: { value: '', validate: function (v) { return targetKind(this) !== 'label' || (typeof v === 'string' && v.trim().length > 0); } },
+            brightnessPct: { value: 94, validate: numeric('brightnessPct') },
+            autoMaxPct: { value: 94, validate: numeric('autoMaxPct') },
+            minPct: { value: 1, validate: numeric('minPct') },
+            transitionOn: { value: 1, validate: numeric('transitionOn') },
+            transitionOff: { value: 1, validate: numeric('transitionOff') },
+            manualOverride: { value: true }, overrideThreshold: { value: 98, validate: numeric('overrideThreshold') },
+            overrideStrategy: { value: 'threshold' }, colorMode: { value: 'keep' },
+            adaptiveEnabled: { value: false },
+            kelvin: { value: 2700, validate: numeric('kelvin') }, mired: { value: 370, validate: numeric('mired') },
+            fixedColor: { value: '#ffffff', validate: v => /^#[0-9a-f]{6}$/i.test(v) },
+            adaptiveEntity: { value: '', validate: v => !v || /^switch\.[a-z0-9_]+$/.test(v) },
+        },
+        oneditprepare: function () {
+            if (this.colorMode === 'adaptive') {
+                $('#node-input-colorMode').val('keep');
+                $('#node-input-adaptiveEnabled').prop('checked', this.adaptiveApply === true);
+            }
+            let states = {}, labels = [], request, labelRequest, generation = 0;
+            $('#node-input-targetType').val(this.targetType || 'entity');
+            const label = $('#node-input-labelId');
+            const entity = $('#node-input-entityId'), adaptive = $('#node-input-adaptiveEntity');
+            function modesForLight() { return states[entity.val()]?.attributes?.supported_color_modes || []; }
+            function update() {
+                const isLabel = $('#node-input-targetType').val() === 'label';
+                $('.sw-entity-target').toggle(!isLabel); $('.sw-label-target').toggle(isLabel);
+                $('#sw-label-name').text(labels.find(l => l.label_id === label.val())?.name || 'Select a Label or enter its stable ID.');
+                const mode = $('#node-input-colorMode').val();
+                $('.sw-color-row').hide();
+                $('.sw-color-' + mode).show();
+                $('.sw-adaptive-row').toggle($('#node-input-adaptiveEnabled').prop('checked'));
+                const profiles = Object.values(states).filter(s => s.entity_id.startsWith('switch.') &&
+                    Array.isArray(s.attributes?.configuration?.lights) && s.attributes.configuration.lights.includes(entity.val()));
+                $('#sw-adaptive-info').text(isLabel ? 'A unique profile is discovered per light. Advanced selects one shared fallback; keep its main switch off.' : modesForLight().includes('color_temp') ?
+                    (profiles.length === 1 ? 'Profile found. Keep its main switch off for one-shot use.' :
+                        'No unique profile found. Select a profile under Advanced.') : 'This light has no known color-temperature support. Normal ON still works.');
+                $('.sw-override-row').toggle($('#node-input-manualOverride').prop('checked'));
+                $('.sw-threshold-row').toggle($('#node-input-manualOverride').prop('checked') && $('#node-input-overrideStrategy').val() === 'threshold');
+                const s = states[entity.val()], modes = s && s.attributes && s.attributes.supported_color_modes;
+                $('#sw-capabilities').text(isLabel ? 'Capabilities and Adaptive Lighting profiles are evaluated per resolved light.' : modes ? 'Supported: ' + modes.join(', ') : 'Select a deployed server and light to read capabilities.');
+                // Disabled options reflect known capabilities, without discarding saved settings.
+                $('#node-input-colorMode option[value="kelvin"], #node-input-colorMode option[value="mired"]').prop('disabled', !isLabel && !!modes && !modes.includes('color_temp'));
+                $('#node-input-colorMode option[value="color"]').prop('disabled', !isLabel && !!modes && !modes.some(m => ['hs','xy','rgb','rgbw','rgbww'].includes(m)));
+            }
+            function source(domain) {
+                return function (req, respond) {
+                    const term = req.term.toLowerCase();
+                    respond(Object.values(states).filter(s => s.entity_id.startsWith(domain + '.') &&
+                        (domain !== 'switch' || s.attributes?.configuration) &&
+                        (s.entity_id.toLowerCase().includes(term) || String(s.attributes.friendly_name || '').toLowerCase().includes(term)))
+                        .slice(0,100).map(s => ({ label: (s.attributes.friendly_name || s.entity_id) + ' (' + s.entity_id + ')', value: s.entity_id })));
+                };
+            }
+            entity.autocomplete({ minLength: 0, source: source('light'), select: function (_e, ui) { entity.val(ui.item.value); update(); } });
+            label.autocomplete({ minLength: 0, source: function (req, respond) {
+                const term = req.term.toLowerCase();
+                respond(labels.filter(l => l.label_id.toLowerCase().includes(term) || l.name.toLowerCase().includes(term))
+                    .map(l => ({ label: l.name + ' (' + l.label_id + ')', value: l.label_id })));
+            }, select: function (_e, ui) { label.val(ui.item.value); update(); } });
+            label.on('focus.swLight', function () { label.autocomplete('search', label.val()); });
+            adaptive.autocomplete({ minLength: 0, source: source('switch') });
+            function load() {
+                generation++; const token = generation;
+                if (request) request.abort(); if (labelRequest) labelRequest.abort();
+                states = {}; labels = []; update();
+                const server = $('#node-input-server').val();
+                if (!server || server === '_ADD_') return;
+                $('#sw-capabilities').text('Loading Home Assistant entities…');
+                // Label route uses the shared adapter; Entity route belongs to HA contrib.
+                labelRequest = $.getJSON('sw-light/labels/' + encodeURIComponent(server))
+                    .done(function (data) { if (token === generation) { labels = Array.isArray(data) ? data : []; update(); } })
+                    .fail(function (_xhr, status) { if (status !== 'abort' && token === generation) $('#sw-label-name').text('Server must be deployed and connected. A stable Label ID can also be entered directly.'); });
+                request = $.getJSON('homeassistant/states/' + encodeURIComponent(server))
+                    .done(function (data) { if (token === generation) { states = data || {}; update(); } })
+                    .fail(function (_xhr, status) { if (status !== 'abort' && token === generation) $('#sw-capabilities').text('Server must be deployed and connected. Entity IDs can also be entered directly.'); });
+            }
+            $('#node-input-server').on('change.swLight', load);
+            $('#node-input-targetType, #node-input-labelId, #node-input-colorMode, #node-input-adaptiveEnabled, #node-input-manualOverride, #node-input-overrideStrategy, #node-input-entityId').on('change.swLight', update);
+            entity.on('focus.swLight', function () { entity.autocomplete('search', entity.val()); });
+            adaptive.on('focus.swLight', function () { adaptive.autocomplete('search', adaptive.val()); });
+            this._swCleanup = function () {
+                generation++; if (request) request.abort(); if (labelRequest) labelRequest.abort();
+                $('#node-input-server, #node-input-targetType, #node-input-labelId, #node-input-colorMode, #node-input-adaptiveEnabled, #node-input-manualOverride, #node-input-overrideStrategy, #node-input-entityId, #node-input-adaptiveEntity').off('.swLight');
+                label.autocomplete('destroy'); label.off('.swLight'); entity.autocomplete('destroy'); adaptive.autocomplete('destroy');
+                delete this._swCleanup;
+            };
+            load(); update();
+        },
+        oneditsave: function () { if (this._swCleanup) this._swCleanup(); },
+        oneditcancel: function () { if (this._swCleanup) this._swCleanup(); }
+    });
+})();
+</script>
+
+<script type="text/html" data-template-name="sw-light">
+    <div class="form-row"><label for="node-input-name"><i class="fa fa-tag"></i> Name</label><input id="node-input-name" type="text" placeholder="SW Light"></div>
+    <div class="form-row"><label for="node-input-server"><i class="fa fa-server"></i> HA server</label><input id="node-input-server" type="text"></div>
+    <div class="form-row"><label for="node-input-targetType">Target</label><select id="node-input-targetType"><option value="entity">Entity</option><option value="label">Label</option></select></div>
+    <div class="form-row sw-label-target"><label for="node-input-labelId">Label</label><input id="node-input-labelId" type="text" placeholder="Stable Label ID"><p id="sw-label-name"></p></div>
+    <div class="form-row sw-entity-target"><label for="node-input-entityId"><i class="fa fa-lightbulb-o"></i> Light</label><input id="node-input-entityId" type="text" placeholder="light.entity_id"></div>
+    <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="on">On</option><option value="off">Off</option><option value="toggle">Toggle</option><option value="msg">From msg</option></select></div>
+    <div class="form-tips" id="sw-capabilities" style="margin-bottom:16px"></div>
+    <fieldset><legend>Automatic lighting</legend>
+        <div class="form-row"><label for="node-input-brightnessPct">On brightness %</label><input id="node-input-brightnessPct" type="number" min="1" max="100" step="0.1"></div>
+        <div class="form-row"><label for="node-input-autoMaxPct">Auto maximum %</label><input id="node-input-autoMaxPct" type="number" min="1" max="100" step="0.1"></div>
+        <div class="form-row"><label for="node-input-minPct">Minimum %</label><input id="node-input-minPct" type="number" min="1" max="100" step="0.1"></div>
+        <div class="form-row"><label for="node-input-transitionOn">On fade (s)</label><input id="node-input-transitionOn" type="number" min="0" max="3600" step="0.1"></div>
+        <div class="form-row"><label for="node-input-transitionOff">Off fade (s)</label><input id="node-input-transitionOff" type="number" min="0" max="3600" step="0.1"></div>
+    </fieldset>
+    <fieldset><legend>Manual override</legend>
+        <div class="form-row"><label for="node-input-manualOverride">Enable</label><input id="node-input-manualOverride" type="checkbox" style="width:auto"></div>
+        <div class="form-row sw-override-row"><label for="node-input-overrideStrategy">Detection</label><select id="node-input-overrideStrategy"><option value="threshold">Brightness threshold + explicit flag</option><option value="explicit">Explicit flag only</option></select></div>
+        <div class="form-row sw-threshold-row"><label for="node-input-overrideThreshold">Threshold %</label><input id="node-input-overrideThreshold" type="number" min="1" max="100" step="0.1"></div>
+        <p class="sw-override-row">Automatic commands pause during override. Manual commands use <code>msg.source = "manual"</code>.</p>
+    </fieldset>
+    <fieldset><legend>Color</legend>
+        <div class="form-row"><label for="node-input-colorMode">Mode</label><select id="node-input-colorMode"><option value="keep">Keep current</option><option value="kelvin">Fixed Kelvin</option><option value="mired">Fixed mired</option><option value="default">Lamp default</option><option value="color">Fixed color</option></select></div>
+        <div class="form-row sw-color-row sw-color-kelvin"><label for="node-input-kelvin">Kelvin</label><input id="node-input-kelvin" type="number" min="1000" max="40000"></div>
+        <div class="form-row sw-color-row sw-color-mired"><label for="node-input-mired">Mired</label><input id="node-input-mired" type="number" min="25" max="1000" step="0.1"></div>
+        <div class="form-row sw-color-row sw-color-color"><label for="node-input-fixedColor">Color</label><input id="node-input-fixedColor" type="color"></div>
+        <div class="form-row"><label for="node-input-adaptiveEnabled">Adaptive Lighting</label><input id="node-input-adaptiveEnabled" type="checkbox" style="width:auto"> On / Off</div>
+        <p class="sw-adaptive-row" id="sw-adaptive-info"></p>
+        <details class="sw-adaptive-row"><summary>Advanced: profile selection</summary>
+            <div class="form-row"><label for="node-input-adaptiveEntity">Profile</label><input id="node-input-adaptiveEntity" type="text" placeholder="Automatic (unique light membership)"></div>
+            <p>Select only when automatic discovery is unavailable or ambiguous. The profile's main switch must be off.</p>
+        </details>
+    </fieldset>
+</script>
+
+<script type="text/html" data-help-name="sw-light">
+    <p>Controls a Home Assistant Entity or Label directly: Trigger → SW Light → Home Assistant. No downstream HA Action node is required. Select On, Off, Toggle, or From msg. Toggle resolves the current state to turn_on or turn_off.</p>
+    <p>Entity is the default for existing flows. Label stores its stable ID and resolves current light members, including labeled devices and labeled area relationships. Each light retains its own override and capabilities. Label output 1 contains target, resolved_entity_ids, results and counts; status summarizes observed states. A failed member does not stop others. <code>msg.target = {type: "label", id: "label_id"}</code> or <code>{type: "entity", id: "light.example"}</code> overrides the configured target for one input. The latest target is observed until the next input.</p>
+    <h3>Inputs</h3>
+    <dl class="message-properties"><dt>action <span class="property-type">string</span></dt><dd>Required with From msg: <code>on</code>, <code>off</code>, or <code>toggle</code>. Falls back to <code>msg.auto_light.action</code> when msg.action is absent. Fixed Action settings ignore message actions.</dd><dt class="optional">source <span class="property-type">string</span></dt><dd><code>automatic</code> (default) or <code>manual</code>.</dd><dt class="optional">brightness_pct <span class="property-type">number</span></dt><dd>0–100. Automatic brightness is capped at the configured maximum.</dd><dt class="optional">transition <span class="property-type">number</span></dt><dd>Fade seconds, 0–3600, if supported.</dd><dt class="optional">manual_override <span class="property-type">boolean</span></dt><dd>Latch/release override with <code>source: "manual"</code>.</dd></dl>
+    <h3>Outputs</h3><ol><li>Original message plus <code>msg.sw_light</code>: last observed HA state, action, service data, and override/adaptive information.</li><li>Original message plus <code>msg.sw_light_event</code>: version, type, entity_id, timestamp, and details.</li></ol>
+    <h3>Details</h3><p>Default on brightness/max 94%, minimum 1%, fade 1s. ON at 100% (brightness 255) always blocks automatic ON, OFF and Toggle. 94%, 95% and 99% do not trigger this guard. Threshold detection defaults to 98% (brightness 250 or above) and pauses automatic commands; explicit overrides can also pause automation. Lowering brightness below the threshold releases its flag; turning off releases all override flags. Manual commands bypass the automatic maximum. Explicit flags require explicit release or off.</p>
+    <p>Top-level message properties override configuration. Brightness precedence: percent, byte, percent step, byte step. Color precedence: Kelvin, mired, RGBWW, RGBW, RGB, HS, XY, name. Invalid values produce errors; unsupported parameters emit an event and are omitted.</p>
+    <p>Adaptive Lighting applies current color temperature once after automatic OFF → ON, with SW Light brightness and fade. Explicit message color wins; already-on brightness changes and manual commands never apply it. A unique profile is discovered automatically; Advanced selects a fallback. Keep its main switch off to prevent continuous control. Use a profile with color-temperature sleep color; RGB sleep profiles fall back with a warning. <code>msg.adaptive_lighting</code> overrides the checkbox for one command. Missing, ambiguous or running profiles emit a warning and retain normal configured color behavior. Keep current and lamp default both omit configured color and leave HA/device behavior in control.</p>
+    <p>Requires HA contrib 0.80.3. See package README for full contracts, examples and compatibility limitations.</p>
+</script>

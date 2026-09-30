@@ -1,0 +1,175 @@
+[
+  {
+    "id": "sw-example-basic",
+    "type": "tab",
+    "label": "SW Light \u2014 basic",
+    "disabled": false,
+    "info": "Development example. Select your own Home Assistant server and light before deployment. No HA credentials are included."
+  },
+  {
+    "id": "sw-example-basic-note",
+    "type": "comment",
+    "z": "sw-example-basic",
+    "name": "Select HA server + light in SW Light before deploy",
+    "info": "SW Light uses Action: From msg and calls HA itself. Outputs are optional debug information; no HA Action node is required. Select a server and one light before deploying.",
+    "x": 350,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "sw-example-basic-inject-0",
+    "type": "inject",
+    "z": "sw-example-basic",
+    "name": "ON",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 120,
+    "wires": [
+      [
+        "sw-example-basic-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-basic-inject-1",
+    "type": "inject",
+    "z": "sw-example-basic",
+    "name": "OFF",
+    "props": [
+      {
+        "p": "action",
+        "v": "off",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 180,
+    "wires": [
+      [
+        "sw-example-basic-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-basic-inject-2",
+    "type": "inject",
+    "z": "sw-example-basic",
+    "name": "Toggle",
+    "props": [
+      {
+        "p": "action",
+        "v": "toggle",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 240,
+    "wires": [
+      [
+        "sw-example-basic-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-basic-inject-3",
+    "type": "inject",
+    "z": "sw-example-basic",
+    "name": "45% / 3s",
+    "props": [
+      {
+        "p": "action",
+        "v": "on",
+        "vt": "str"
+      },
+      {
+        "p": "brightness_pct",
+        "v": "45",
+        "vt": "num"
+      },
+      {
+        "p": "transition",
+        "v": "3",
+        "vt": "num"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "x": 180,
+    "y": 300,
+    "wires": [
+      [
+        "sw-example-basic-light"
+      ]
+    ]
+  },
+  {
+    "id": "sw-example-basic-light",
+    "type": "sw-light",
+    "z": "sw-example-basic",
+    "name": "SW Light",
+    "server": "",
+    "entityId": "",
+    "x": 460,
+    "y": 210,
+    "wires": [
+      [
+        "sw-example-basic-result"
+      ],
+      [
+        "sw-example-basic-events"
+      ]
+    ],
+    "action": "msg",
+    "overrideThreshold": 98
+  },
+  {
+    "id": "sw-example-basic-result",
+    "type": "debug",
+    "z": "sw-example-basic",
+    "name": "result",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 710,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sw-example-basic-events",
+    "type": "debug",
+    "z": "sw-example-basic",
+    "name": "events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 710,
+    "y": 260,
+    "wires": []
+  }
+]
