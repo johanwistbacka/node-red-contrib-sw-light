@@ -8,27 +8,65 @@ function setup(extra = {}) {
     let Constructor, observer, connection;
     let current = { entity_id: 'light.example', state: 'on', attributes: { brightness: 100, supported_color_modes: ['brightness'], supported_features: 32 } };
     let ready = true, released = false, attempts = 0;
-    const calls = [], messages = [], statuses = [], errors = [];
+    const calls = [], messages = [], statuses = [], errors = [], logs = [];
     const RED = { nodes: { registerType: (_type, ctor) => Constructor = ctor,
         createNode: node => { const emitter = new EventEmitter(); node.on = emitter.on.bind(emitter); node.emit = emitter.emit.bind(emitter);
-            node.send = outputs => messages.push(outputs); node.status = status => statuses.push(status); node.error = error => errors.push(error); } } };
+            node.send = outputs => messages.push(outputs); node.status = status => statuses.push(status); node.error = error => errors.push(error); node.log = value => logs.push(value); } } };
     const adapter = { connected: () => ready, state: () => structuredClone(current), states: () => extra.states || {}, services: () => extra.services || {},
         subscribe: async (_id, obs, conn) => { observer = obs; connection = conn; },
         call: async (...args) => { calls.push(args); if (extra.onCall) await extra.onCall(...args); if (extra.reject) throw new Error('Transport failed'); }, close: async () => { released = true; } };
-    register(RED, () => {
+    register(RED, (_red, _server, _integration, diagnostic) => {
         attempts++;
         if (extra.initFailures && attempts <= extra.initFailures) {
             const error = new Error('Home Assistant server client is not initialized'); error.eventType = 'unavailable'; throw error;
         }
-        return adapter;
+        diagnostic?.('fixture provider ready'); return adapter;
     });
     const node = new Constructor({ entityId: 'light.example', ...extra.config });
-    return { node, calls, messages, statuses, errors,
+    return { node, calls, messages, statuses, errors, logs,
         input: msg => new Promise(resolve => node.emit('input', msg, outputs => messages.push(outputs), error => resolve(error))),
         update: state => { current = state; observer?.(state); }, disconnect: () => { ready = false; connection?.(false); },
         reconnect: () => { ready = true; connection?.(true); },
         close: () => new Promise(resolve => node.emit('close', false, resolve)), released: () => released };
 }
+test('Entity status dates real display changes, retaining time on repeated HA observations', async t => {
+    let time = new Date(2026, 9, 30, 14, 32, 8).getTime();
+    t.mock.method(Date, 'now', () => time);
+    const s = setup();
+    t.after(() => s.close());
+    await s.input({ action: 'on' });
+    const observed = { entity_id: 'light.example', state: 'on', attributes: { brightness: 100 } };
+    s.update(observed);
+    assert.equal(s.statuses.at(-1).text, 'AUTO · ON · 39.2% · 30/10 14:32:08');
+    time += 1000;
+    s.update({ ...observed, last_updated: '2026-10-30T14:32:09Z' });
+    assert.equal(s.statuses.at(-1).text, 'AUTO · ON · 39.2% · 30/10 14:32:08');
+    s.update({ ...observed, attributes: { brightness: 150 } });
+    assert.equal(s.statuses.at(-1).text, 'AUTO · ON · 58.8% · 30/10 14:32:09');
+    time += 1000;
+    s.disconnect();
+    assert.equal(s.statuses.at(-1).text, 'HA NOT READY · 30/10 14:32:10');
+    time += 1000;
+    s.disconnect();
+    assert.equal(s.statuses.at(-1).text, 'HA NOT READY · 30/10 14:32:10');
+});
+
+test('structural diagnostics are quiet by default and opt in without changing light commands', async () => {
+    const previous = process.env.SW_LIGHT_DEBUG;
+    try {
+        for (const value of [undefined, '0', '1']) {
+            if (value === undefined) delete process.env.SW_LIGHT_DEBUG; else process.env.SW_LIGHT_DEBUG = value;
+            const s = setup();
+            assert.equal(await s.input({ action: 'on' }), undefined);
+            assert.equal(s.calls.length, 1);
+            if (value === '1') { assert.ok(s.logs.some(x => x.includes('constructor=created'))); assert.ok(s.logs.some(x => x.includes('fixture provider ready'))); }
+            else assert.deepEqual(s.logs, []);
+            await s.close();
+        }
+    } finally {
+        if (previous === undefined) delete process.env.SW_LIGHT_DEBUG; else process.env.SW_LIGHT_DEBUG = previous;
+    }
+});
 test('runtime preserves incoming message and labels cached state honestly', async () => {
     const s = setup(); const msg = { action: 'on', payload: 'unchanged', topic: 'room', brightness_pct: 45 };
     assert.equal(await s.input(msg), undefined); assert.equal(s.calls.length, 1);
@@ -60,7 +98,7 @@ test('unavailability, invalid configuration and async rejection stay contained',
         assert.ok(s.messages.some(m => m[1]?.sw_light_event.type === 'error')); await s.close();
     }
     const s = setup(); s.disconnect(); assert.ok(await s.input({ action: 'on' }));
-    assert.equal(s.calls.length, 0); assert.equal(s.statuses.at(-1).text, 'HA NOT READY'); await s.close();
+    assert.equal(s.calls.length, 0); assert.match(s.statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); await s.close();
     const count = s.messages.length; await s.input({ action: 'on' }); assert.equal(s.messages.length, count);
 });
 test('adaptive apply failure preserves the successful light result and reports phase', async () => {
@@ -72,12 +110,37 @@ test('adaptive apply failure preserves the successful light result and reports p
     const event = s.messages.find(m => m[1]?.sw_light_event.phase === 'adaptive_apply')[1].sw_light_event;
     assert.equal(event.type, 'warning'); assert.equal(event.light_service_completed, true); await s.close();
 });
+test('HA service errors retain provider code and phase without changing the request or retrying', async () => {
+    const failure = { code: 'home_assistant_error', message: 'Failed to send request: device did not respond' };
+    const s = setup({ onCall: async () => { throw failure; } });
+    assert.equal(await s.input({ action: 'on' }), failure);
+    assert.equal(s.calls.length, 1);
+    assert.deepEqual(s.calls[0], ['light', 'turn_on', { brightness: 239, transition: 1 }, { entity_id: 'light.example' }]);
+    const event = s.messages.find(m => m[1]?.sw_light_event.phase === 'light_service_call')[1].sw_light_event;
+    assert.equal(event.type, 'error'); assert.equal(event.code, failure.code);
+    assert.equal(event.message, failure.message); assert.equal(event.service, 'turn_on');
+    assert.equal(event.light_service_completed, false);
+    assert.ok(!s.messages.some(m => m[0]));
+    await s.close();
+});
+test('unavailable entity and disconnected HA do not attempt a light service call', async () => {
+    for (const disconnected of [false, true]) {
+        const s = setup();
+        if (disconnected) s.disconnect();
+        else s.update({ entity_id: 'light.example', state: 'unavailable', attributes: {} });
+        assert.ok(await s.input({ action: 'on' }));
+        assert.equal(s.calls.length, 0);
+        assert.ok(!s.messages.some(m => m[1]?.sw_light_event.phase === 'light_service_call'));
+        assert.match(s.statuses.at(-1).text, disconnected ? /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/ : /^ENTITY UNAVAILABLE · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+        await s.close();
+    }
+});
 test('configured ON controls an OFF light with its own brightness and no downstream action', async () => {
     const s = setup({ config: { action: 'on', brightnessPct: 70, autoMaxPct: 80 } });
     s.update({ entity_id: 'light.example', state: 'off', attributes: { supported_color_modes: ['brightness'], supported_features: 32 } });
     await s.input({ payload: Date.now(), action: 'invalid-but-ignored' });
     assert.equal(s.calls[0][1], 'turn_on'); assert.equal(s.calls[0][2].brightness, 179);
-    assert.equal(s.calls[0][2].transition, 1); assert.equal(s.statuses.at(-1).text, 'AUTO · ON · 70%'); await s.close();
+    assert.equal(s.calls[0][2].transition, 1); assert.match(s.statuses.at(-1).text, /^AUTO · ON · 70% · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); await s.close();
 });
 test('explicit 100% threshold allows OFF at 94, 95 and 99 percent', async () => {
     const s = setup({ config: { action: 'off', overrideThreshold: 100 } });
@@ -86,14 +149,14 @@ test('explicit 100% threshold allows OFF at 94, 95 and 99 percent', async () => 
         await s.input({ transition: 3 }); assert.equal(s.calls.at(-1)[1], 'turn_off');
         assert.deepEqual(s.calls.at(-1)[2], { transition: 3 });
     }
-    assert.equal(s.calls.length, 4); assert.equal(s.statuses.at(-1).text, 'AUTO · OFF'); await s.close();
+    assert.equal(s.calls.length, 4); assert.match(s.statuses.at(-1).text, /^AUTO · OFF · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); await s.close();
 });
 test('configured actions all block at 255 and status explains the decision', async () => {
     for (const action of ['on','off','toggle']) {
         const s = setup({ config: { action } });
         s.update({ entity_id: 'light.example', state: 'on', attributes: { brightness: 255, supported_color_modes: ['brightness'] } });
         assert.equal(await s.input({ payload: 'trigger' }), undefined);
-        assert.equal(s.calls.length, 0); assert.equal(s.statuses.at(-1).text, `MANUAL · 100% · BLOCK ${action.toUpperCase()}`);
+        assert.equal(s.calls.length, 0); assert.match(s.statuses.at(-1).text, new RegExp(`^MANUAL · 100% · BLOCK ${action.toUpperCase()} · \\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}$`));
         await s.close();
     }
     // 100% protection cannot be disabled by the optional extra override strategy.
@@ -122,7 +185,7 @@ test('From msg actions, nested fallback, precedence and invalid/missing actions'
 });
 test('uninitialized HA is transient and next input retries rather than freezing error', async () => {
     const s = setup({ config: { action: 'on' }, initFailures: 1 });
-    assert.equal(s.statuses.at(-1).text, 'HA NOT READY');
+    assert.match(s.statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
     assert.ok(await s.input({})); assert.equal(s.calls.length, 0);
     assert.equal(await s.input({}), undefined); assert.equal(s.calls.length, 1); await s.close();
 });

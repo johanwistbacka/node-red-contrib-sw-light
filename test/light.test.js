@@ -67,7 +67,7 @@ test('adaptive, keep and lamp default omit configured color; message wins', () =
     assert.equal(p.data.color_temp_kelvin, 2200); assert.equal(p.explicitColor, true); assert.deepEqual(p.ignoredConflicts, ['rgb_color']);
     assert.equal(plan({ action: 'on' }, { colorMode: 'kelvin', kelvin: 3000 }).data.color_temp_kelvin, 3000);
     assert.equal(plan({ action: 'on', color_temp: 400 }).data.color_temp_kelvin, 2500);
-    assert.throws(() => plan({ action: 'on', color_temp_kelvin: 1500 }));
+    assert.equal(plan({ action: 'on', color_temp_kelvin: 1500 }).data.color_temp_kelvin, 2000);
 });
 test('color normalization respects all native modes and converts RGB/HS', () => {
     const samples = { rgb_color: [255,0,0], rgbw_color: [255,0,0,80], rgbww_color: [255,0,0,20,40], hs_color: [120,100], xy_color: [0.3,0.4] };
@@ -119,4 +119,26 @@ test('observed HA colors tolerate null and non-array attributes and copy valid a
     }
     info.color.rgb_color[0] = 99;
     assert.deepEqual(observed, before);
+});
+
+
+test('manual and fixed Kelvin/mired clamp to modern and legacy lamp limits without mutating inputs', () => {
+    for (const attrs of [{ min_color_temp_kelvin: 2202, max_color_temp_kelvin: 4000 }, { min_mireds: 250, max_mireds: 454 }]) {
+        const s = state(); delete s.attributes.min_color_temp_kelvin; delete s.attributes.max_color_temp_kelvin;
+        Object.assign(s.attributes, attrs); const before = structuredClone(s);
+        for (const [requested, sent] of [[1000, 2203], [3500, 3500], [5000, 4000]]) {
+            const lower = attrs.min_color_temp_kelvin ?? Math.ceil(1e6 / attrs.max_mireds);
+            const expected = requested === 1000 ? lower : sent;
+            const msg = { action: 'on', source: 'manual', color_temp_kelvin: requested };
+            assert.equal(plan(msg, {}, s).data.color_temp_kelvin, expected); assert.equal(msg.color_temp_kelvin, requested);
+            assert.equal(plan({ action: 'on' }, { colorMode: 'kelvin', kelvin: requested }, s).data.color_temp_kelvin, expected);
+        }
+        assert.equal(plan({ action: 'on', color_temp: 200 }, {}, s).data.color_temp_kelvin, 4000);
+        assert.equal(plan({ action: 'on' }, { colorMode: 'mired', mired: 200 }, s).data.color_temp_kelvin, 4000);
+        assert.deepEqual(s, before);
+    }
+    assert.equal(plan({ action: 'on', color_temp_kelvin: 5000 }, {}, state(100, ['brightness'])).data.color_temp_kelvin, undefined);
+    for (const value of [NaN, 'bad', 0, 50000, 3000.5]) assert.throws(() => plan({ action: 'on', color_temp_kelvin: value }));
+    const invalid = state(); invalid.attributes.min_color_temp_kelvin = 5000; invalid.attributes.max_color_temp_kelvin = 4000;
+    assert.throws(() => plan({ action: 'on', color_temp_kelvin: 5000 }, {}, invalid), /Invalid lamp/);
 });

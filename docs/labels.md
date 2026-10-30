@@ -1,4 +1,4 @@
-# Label targets — 0.1.9 development candidate
+# Label, Area, multiple-entity and Group targets
 
 ## Investigated APIs and membership
 
@@ -24,8 +24,8 @@ parent device is not inherited through `via_device_id`. Hidden entries are exclu
 indirect device/area expansion excludes config/diagnostic entities, whereas a
 directly labeled entity may have a category. SW Light additionally excludes disabled
 entries and non-`light.*` IDs, and deduplicates the final list. These are registry
-entities; SW Light does not expand a light group's members or custom integration
-relationships. A `light` group can therefore coexist with its physical members;
+entities; Label resolution does not expand a light group's members or custom integration
+relationships. Explicit Group selection expands members as described below. A `light` group can therefore coexist with its physical members;
 avoid putting both in the test Label if independent physical control is required.
 
 Primary sources:
@@ -35,8 +35,39 @@ Primary sources:
 - [HA WebSocket API](https://developers.home-assistant.io/docs/api/websocket/)
 - [HA contrib 0.80.3](https://www.npmjs.com/package/node-red-contrib-home-assistant-websocket/v/0.80.3)
 
-Area relationships are necessary for Label semantics. **Area is not an exposed
-target type**, and no Area/Room configuration, occupancy, scene or mode logic is added.
+Area relationships are necessary for Label semantics. Since 0.1.16, **Area** is also
+an exposed target type. It uses direct entity areas or inherited device areas,
+with explicit entity area precedence; hidden/disabled/non-light/category members
+are excluded. No occupancy, scene or mode logic is added. Multiple entities uses
+an explicit nonempty `entityIds` array, deduplicated without registry expansion.
+
+## Explicit Group selection (0.1.18)
+
+Known nested light-group identities remain group targets during missing or malformed
+state, until successful reconciliation removes them from membership. Group identity
+for an initially missing `light.*` cannot be inferred; it remains a leaf failure.
+
+Group accepts `light.*` modern light groups and legacy `group.*` IDs whose HA
+state contains `attributes.entity_id`. Root/nested group membership is expanded
+recursively; duplicate leaf lights execute once and non-light members are ignored.
+Missing/malformed group lists and cycles fail closed before any dispatch. Missing
+or unavailable leaf lights remain in the list and produce per-member failures.
+Group suggestions use the existing authenticated `homeassistant/states` route,
+display friendly names, and save `groupId`. No new registry API is required.
+
+Every command resolves fresh membership. The single state subscription watches
+both the root/nested groups and the leaf lights. Group state changes debounce
+reconciliation by 100 ms; reconnect and the 30-second timer provide a fallback.
+Existing controllers retain their overrides when members remain. After a resolution
+failure the root and last known nested groups remain observed, preserving raw
+deletions and enabling idle repair recovery. Group aggregate brightness never controls a
+member's override. Empty groups report `target_empty` and **GROUP EMPTY**.
+
+`msg.target = {type:"group", id:"light.room"}` follows the same temporary target
+contract. Existing Entity/Label/Area/Multiple entities do not gain recursive group
+expansion implicitly: select Group for independent physical lamp control.
+
+[Home Assistant Group membership](https://www.home-assistant.io/integrations/group/)
 
 ## Architecture and editor
 
@@ -44,10 +75,9 @@ target type**, and no Area/Room configuration, occupancy, scene or mode logic is
 status. `controller.js` owns the existing execution path, one Override detector per
 entity, command planning, capability filtering and Adaptive Lighting. `sw-light.js`
 coordinates controllers and output. `ha-adapter.js` alone knows provider internals.
-Adding a future Area branch to target validation/resolution will reuse these same
-controllers; it does not require another light-control implementation.
+Area, Multiple entities and Group reuse these same controllers.
 
-Target choices are **Entity** (default) and **Label**. Missing `targetType` in old
+Target choices are **Entity** (default), **Multiple entities**, **Label**, **Area** and **Group**. Missing `targetType` in old
 flows means Entity; `entityId` and old outputs/status remain compatible. Label uses
 `labelId`, a stable HA ID. Autocomplete displays `name (label_id)` and a separate
 name helper; it stores only the ID. Changing server aborts requests and ignores
@@ -57,11 +87,15 @@ Entity autocomplete still uses HA contrib's `homeassistant/states` route. Label
 uses `/sw-light/labels/:serverId`, protected by Node-RED `server.read`, fetching
 `config/label_registry/list` through the shared adapter. A deployed connected server
 is required for suggestions; entering a known stable Label ID remains possible.
+Area uses the equivalent `/sw-light/areas/:serverId` guarded route and shared
+`config/area_registry/list` transport. Its autocomplete stores `area_id`, not name.
+Multiple entities displays friendly names and saves only IDs from the multiple
+selection. Add by ID supports unavailable lights; server refresh retains selected IDs.
 
 ## Refresh, subscriptions and overrides
 
 A node caches an immutable registry snapshot for **30 seconds**. Resolved lists are
-cached per snapshot and Label ID, so repeated brightness inputs do not rescan all
+cached per snapshot, target type and stable ID, so repeated brightness inputs do not rescan all
 registries. Provider events `labels_updated`, `entity_registry_updated`,
 `devices_updated`, `areas_updated` invalidate the snapshot and debounce reconciliation
 by 100 ms. The provider itself throttles registry updates. Ready/connect/state-loaded
@@ -87,7 +121,8 @@ later light/adaptive calls and output from that node.
 input. Its members remain observed until the next input; an input without `target`
 restores configured targeting. Reconciliation discards controllers that leave the
 active target, including their explicit latch. Use a stable target when retaining
-explicit latches across commands. Unknown types, including Area, fail validation.
+explicit latches across commands. Area accepts `{type:"area", id:"area_id"}`; Multiple entities accepts
+`{type:"entities", ids:["light.one", "light.two"]}`. Unknown types fail validation.
 
 Each light retains independent state, automatic maximum, capability filtering,
 override flags and Adaptive eligibility. With max 94%, threshold 98%, window 94%,

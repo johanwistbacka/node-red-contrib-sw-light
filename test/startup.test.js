@@ -24,23 +24,23 @@ test('Flow.start before client initialization: real adapter retries on input, re
     assert.doesNotThrow(() => { node = new Constructor({ server: 'server', entityId: 'light.example', action: 'on' }); });
     assert.equal(resolutions, 0); assert.equal(errors.length, 0);
     const input = () => new Promise(resolve => node.emit('input', {}, () => {}, resolve));
-    assert.ok(await input()); assert.equal(statuses.at(-1).text, 'HA NOT READY'); assert.equal(calls.length, 0);
+    assert.ok(await input()); assert.match(statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); assert.equal(calls.length, 0);
     client = { isConnected: true, eventBus: new EventEmitter(), websocket: {
         isStatesLoaded: true, getState: () => structuredClone(state), getStates: () => ({}), getServices: () => ({}),
         subscribeMessage: async () => () => {}, callService: async (...args) => calls.push(args) } };
     assert.equal(await input(), undefined); assert.equal(calls[0][1], 'turn_on'); assert.equal(calls[0][2].brightness, 239);
     client.isConnected = false; client.eventBus.emit('ha_client:close');
-    assert.ok(await input()); assert.equal(statuses.at(-1).text, 'HA NOT READY'); assert.equal(calls.length, 1);
+    assert.ok(await input()); assert.match(statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); assert.equal(calls.length, 1);
     client.isConnected = true; client.eventBus.emit('ha_client:ready');
     assert.equal(await input(), undefined); assert.equal(calls.length, 2);
     const readyClient = client;
     client = undefined;
-    assert.ok(await input()); assert.equal(statuses.at(-1).text, 'HA NOT READY'); assert.equal(calls.length, 2);
+    assert.ok(await input()); assert.match(statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); assert.equal(calls.length, 2);
     client = readyClient;
     state = { entity_id: 'light.example', state: 'unavailable' };
-    assert.ok(await input()); assert.equal(statuses.at(-1).text, 'ENTITY UNAVAILABLE'); assert.equal(calls.length, 2);
+    assert.ok(await input()); assert.match(statuses.at(-1).text, /^ENTITY UNAVAILABLE · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); assert.equal(calls.length, 2);
     selectedServer = undefined;
-    assert.ok(await input()); assert.equal(statuses.at(-1).text, 'CONFIG ERROR');
+    assert.ok(await input()); assert.match(statuses.at(-1).text, /^CONFIG ERROR · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
     selectedServer = server; state = { entity_id: 'light.example', state: 'off', attributes: { supported_color_modes: ['brightness'] } };
     assert.equal(await input(), undefined); assert.equal(calls.length, 3);
     await new Promise(resolve => node.emit('close', false, resolve)); assert.equal(client.eventBus.eventNames().length, 0);

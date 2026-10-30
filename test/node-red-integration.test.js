@@ -16,6 +16,8 @@ test('Node-RED creates and resolves the published HA config node for production 
         const Websocket = haReq('./dist/homeAssistant/Websocket.js').default;
         const provider = haReq('./dist/homeAssistant/index.js');
         const connect = Websocket.prototype.connect, close = Websocket.prototype.close;
+        const previousDebug = process.env.SW_LIGHT_DEBUG;
+        process.env.SW_LIGHT_DEBUG = '1';
         const calls = []; let connections = 0, runtimeRED;
         Websocket.prototype.connect = async function () {
             connections++;
@@ -57,7 +59,7 @@ test('Node-RED creates and resolves the published HA config node for production 
                 target.receive({});
             });
             assert.ok(await input()); assert.equal(calls.length, 0);
-            assert.equal(node.status.lastCall.args[0].text, 'HA NOT READY');
+            assert.match(node.status.lastCall.args[0].text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
             // Close a real runtime node after an input attaches while HA is
             // unready. Its listeners must leave the shared provider untouched.
             const waiting = helper.getNode('waiting');
@@ -93,6 +95,7 @@ test('Node-RED creates and resolves the published HA config node for production 
             assert.match(logs, /"callService":true/);
             assert.doesNotMatch(logs, /never-log-this-test-token|127\.0\.0\.1|light\.example/);
         } finally {
+            if (previousDebug === undefined) delete process.env.SW_LIGHT_DEBUG; else process.env.SW_LIGHT_DEBUG = previousDebug;
             await helper.unload();
             Websocket.prototype.connect = connect; Websocket.prototype.close = close;
             globals.setRED(previousRED);

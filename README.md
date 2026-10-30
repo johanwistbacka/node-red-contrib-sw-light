@@ -1,6 +1,6 @@
-# SW Light — v0.1.9
+# SW Light — v0.1.30
 
-A reusable Node-RED node for a Home Assistant `light.*` Entity or Label. Select an
+A reusable Node-RED node for a Home Assistant `light.*` Entity, Multiple entities, Label, Area or Group. Select an
 existing HA server, select a target, deploy in a **development** environment,
 and select Action **On**, **Off**, **Toggle**, or **From msg**. Display name:
 **SW Light**; flow type: `sw-light`.
@@ -10,17 +10,157 @@ selected light, checks manual override and calls the HA light service itself.
 No external HA Action node is required; the two outputs are for observation
 and integration only. With a fixed Action, a normal timestamp Inject is enough.
 
-## Label targets in 0.1.9
+## Support
 
-Choose **Target → Entity** (the default, including existing flows) or **Label**.
+Report bugs and request support in the
+[GitHub issue tracker](https://github.com/johanwistbacka/node-red-contrib-sw-light/issues).
+
+## Status timestamps in 0.1.30
+
+The status under each node now includes the date and time of its latest displayed
+text or icon change, for example `AUTO · ON · 94% · 30/10 14:32:08`.
+Identical observations keep the timestamp. Entity, multiple-light and error
+statuses use the Node-RED process's local timezone. Restarting or deploying
+starts a new timestamp; this is not confirmation of a physical lamp change.
+
+## Existing-node temperature bounds in 0.1.26
+
+Missing or blank optional Dynamic Kelvin bounds now use **2000–5500 K** in
+both runtime and editor validation, for every target and color mode. Existing
+saved nodes can deploy without being opened and saved individually. Opening
+an older node fills those fields in the dialog; Cancel leaves its saved
+configuration unchanged. Explicit numeric bounds are preserved. Invalid
+numbers, nonnumeric values and an inverted effective range remain errors.
+Malformed saved values stay visible and invalid when the dialog is saved;
+opening a node cannot silently replace them with defaults.
+
+This fixes hidden empty Kelvin fields marking **Lamp default** nodes invalid,
+including the reproduced Hall Tak 10 case. Update the package, restart Node-RED
+and reload the editor to load both corrected validators and runtime.
+
+## Dynamic temperature refresh in 0.1.13
+
+Every plain ON command now refreshes solar temperature, including already-on
+lights. Absolute and relative brightness commands preserve temperature while
+on. Explicit message color and manual override retain their precedence.
+
+For a local installation, use the uniquely versioned archive
+`johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz` and restart Node-RED.
+
+## Area and multiple entities since 0.1.16
+
+Choose **Target → Area** and select the HA name; only its stable Area ID is saved.
+SW Light resolves lights in that area, including lights that inherit their device's
+area. An explicit entity area takes precedence over its device area. Hidden,
+disabled, non-light and diagnostic/config entities are excluded from Area expansion.
+A deleted Area fails closed; an existing area with no matching lights returns an
+empty aggregate and **AREA EMPTY**. Membership refreshes while idle and on reconnect.
+
+Choose **Target → Multiple entities**, then select the lights with Cmd/Ctrl-click.
+**Add by ID** can add a known light that is unavailable or absent from suggestions.
+The saved `entityIds` array is explicit: unavailable members report individual
+failures and duplicates execute once. This target does not require HA registries.
+
+Each light keeps independent capabilities, override, brightness limits and Dynamic
+CT. Area and Multiple entities use the same aggregate output contract as Label.
+Runtime overrides accept `{type: "area", id: "area_id"}` or
+`{type: "entities", ids: ["light.one", "light.two"]}` in `msg.target`.
+
+## Group targets since 0.1.18
+
+Choose **Target → Group** and select a Home Assistant light group (`light.*`) or
+legacy group (`group.*`). Suggestions show friendly names; only the entity ID is
+saved. SW Light expands the state's `attributes.entity_id` list recursively,
+ignores non-light members and deduplicates leaf lights. Each lamp keeps its own
+capabilities, manual override, brightness limit and Dynamic temperature behavior.
+Commands go to those lamps individually. Brightness-only dimming keeps CT while on.
+
+Membership is read afresh on every input and refreshed while idle on root/nested
+group state changes, reconnect and a 30-second fallback. Empty groups report
+**GROUP EMPTY**. Missing or malformed group membership and cycles fail closed;
+an unavailable leaf reports its own failure without blocking other lamps. Known
+nested group identities are retained until successful membership removes them;
+a missing light never previously identified as a group remains a leaf failure.
+Runtime override: `msg.target = {type: "group", id: "light.room"}`.
+
+Existing Entity, Label, Area and Multiple entities selections retain their target
+semantics. Selecting a light group as **Entity** still controls its aggregate
+entity; choose **Group** for expansion and independent per-lamp control.
+
+## Local validation on 2026-10-05 and 2026-10-06
+
+Real HA service/state tests verified repeated ON refreshing Dynamic CT,
+brightness-only dimming preserving CT, per-lamp manual override/release, mixed
+Label and Group protection, Group toggle and partial success with an unavailable
+member. Explicit out-of-range Kelvin was clamped per lamp: requested 5000 K
+reported 4000 K; requested 1000 K reported the advertised minimum 2202 K.
+Observed rounding includes 2800 K reported as 2801 K and 100% as 254/255.
+These state checks do not prove perceived physical color.
+
+The window lamps previously showed a device-specific interaction between CT,
+brightness and a one-second ON fade. The approved local workaround was On fade
+0 for those two nodes; global fade defaults remain unchanged. The exact HA/device
+cause remains unknown. Editor save/reopen and server-switch retention were checked
+for Area, Multiple entities and Group selection. Full Area ON, 70% dimming and OFF passed on four available lights with an
+unavailable fifth member reported separately. Dimming preserved each lamp's
+CT. The original lamp states and saved flow were restored after testing. Live
+nested Group membership changes are not verified.
+
+A real HA restart initially crashed the HA provider. With the explicit registry
+repair below, a repeated test passed without a Node-RED restart or deploy:
+no failed input replay was observed, new ON inputs worked, and direct HA
+brightness changes activated/released override in idle nodes after recovery.
+This applies to patched HA contrib 0.80.3, not an unpatched standard installation.
+See [the repair's scope and verification](docs/ha-registry-reconnect.md).
+
+## Existing-node compatibility in 0.1.12
+
+Older saved Entity and Label nodes can omit the newer Dynamic temperature
+fields. The editor now validates those absent fields using the same
+2000–5500 K defaults as the runtime, without modifying flow data or requiring
+each node to be opened and saved. Explicit invalid values remain invalid.
+Entity nodes saved before Target selection also keep their default Entity target.
+
+Light service failures retain Home Assistant's `code` and include
+`phase: "light_service_call"`, `domain: "light"` and the attempted `service`
+on output 2 and per-light failure results. An unavailable observed entity,
+failed Label resolution and an unavailable HA connection retain their distinct
+existing events/status. A device-response error still needs investigation in
+Home Assistant; this editor fix does not repair an unreachable device.
+
+## Dynamic color temperature introduced in 0.1.10
+
+Select **Dynamic (sun-based)** to calculate color temperature directly from Home
+Assistant's configured location. Defaults are 2000–5500 K using an Adaptive
+Lighting-like daylight parabola; each lamp's physical range clamps the result.
+Each ON command sends current Kelvin with brightness in one `light.turn_on`,
+including when the lamp is already on. Messages with `brightness_pct`,
+`brightness`, `brightness_step_pct` or `brightness_step` preserve CT while
+the lamp is already on; from OFF they also set initial solar CT.
+Explicit message color/CT wins.
+Missing/invalid HA location falls back to normal ON with a generic warning.
+No Adaptive Lighting profile, polling or global variable is required.
+
+Keep current stays the default and all saved legacy modes retain their behavior.
+Legacy Adaptive Lighting is available under its collapsed compatibility section;
+Dynamic bypasses it, including saved/message opt-in, to avoid competing CT writes.
+Advanced Dynamic settings contain only Warmest/Coolest Kelvin.
+
+See [the model, upstream comparison and one-lamp test sequence](docs/solar-temperature.md).
+The numerical comparison sampled 384 instants across solstices/equinoxes; maximum
+absolute difference from the recorded upstream normal CT reference is 20 K with SunCalc 2.1.1. This remains an experimental development release. Live service/state and
+browser checks are recorded below; perceived physical color remains unverified.
+
+## Label targets (introduced in 0.1.9)
+
+Choose **Target → Entity** (the default, including existing flows), **Multiple entities**, **Label**, **Area**, or **Group**.
 Label autocomplete displays the HA name and stores the stable Label ID. Current
 members are resolved from entity, device and labeled-area registry relationships;
-non-lights are excluded and duplicate light IDs are removed. Area is not a target
-choice in this version.
+non-lights are excluded and duplicate light IDs are removed.
 
 Each resolved light reuses the same controller with independent override,
 capabilities, brightness limits and Adaptive Lighting. One overridden/unavailable
-member does not stop the others. Output 1 for Labels contains `target`,
+member does not stop the others. Output 1 for group targets contains `target`,
 `resolved_entity_ids`, per-light `results` and success/skipped/failure/manual counts;
 output 2 identifies the actual entity for per-light events. Status aggregates
 last observed states.
@@ -33,8 +173,8 @@ configuration for one input; that target remains observed until the next input.
 Departed target members discard their controller's explicit latch.
 
 See [Label architecture, API evidence and exact multi-light test sequence](docs/labels.md).
-This is a local development candidate; no npm publication or HA installation is
-part of its preparation. Physical Label behavior still needs the documented test.
+Live mixed-override Label service/state checks are recorded above. Physical
+Label behavior and the broader membership/lifecycle sequence still need verification.
 
 ## Package identity and migration
 
@@ -52,43 +192,52 @@ or, with Node-RED stopped, run these commands in its user directory:
 
 ```sh
 npm uninstall node-red-contrib-sw-light
-npm install @johanwistbacka/node-red-contrib-sw-light@0.1.9
+npm install @johanwistbacka/node-red-contrib-sw-light@0.1.30
 ```
 
 Restart Node-RED and reload the editor. Existing flow nodes retain type
 `sw-light`; verify the scoped package/version in Palette Manager before testing.
-The scoped candidate is not published yet; registry installation becomes
-available after its first authorized publication.
+The scoped package is published. A version can be installed from the registry
+once it is available there; a prepared local version can use its frozen archive.
 
 ## Compatibility and installation
 
+**HA restart reliability:** HA contrib 0.80.3 and 0.81.0 contain a reproduced
+registry rejection defect. This package supplies the opt-in `sw-light-ha-registry`
+command and [check/apply/restore instructions](docs/ha-registry-reconnect.md).
+Follow that explicit repair step for the verified affected versions and recheck
+after provider updates. Installing SW Light alone does not patch the provider.
+
+
 Requires Node.js >=18.2.0, Node-RED >=3.1.1 and
-`node-red-contrib-home-assistant-websocket` **exactly 0.80.3**. This initial
-adapter is intentionally pinned because it uses that package's internal
-shared-client module. It does not require the HA Node-RED companion integration.
-HA contrib itself requires Home Assistant >=2023.12. Numeric bounds and
+`node-red-contrib-home-assistant-websocket` **>=0.80.3 <0.82.0**. The adapter
+uses that package's internal shared-client module and has been checked against
+the published 0.80.3 and 0.81.0 packages. HA contrib 0.81.x requires Node.js >=20. It does not require the HA Node-RED companion integration.
+HA contrib itself requires Home Assistant >=2023.12. Label targets additionally
+require HA >=2024.4 (the Label registry). Area targets fetch only entity, device
+and area registries and do not require the Label API. Numeric bounds and
 capabilities are read from the selected light.
 
-This is an experimental development release. Local tests pass, but the runtime integration
-has not yet been confirmed with the correct installed version in the real
-Home Assistant environment. The adapter uses internal HA contrib APIs;
-compatibility outside 0.80.3 is unsupported. Temporary structural diagnostics
-are enabled. Test with a development light before relying on this node.
+This is an experimental development release. The 0.1.13 runtime was installed
+from its frozen archive and verified after restart in local Node-RED 5.0.7 with
+HA contrib 0.80.3 and the existing Home Assistant server. The new candidate adds
+Area, Multiple entities and Group runtime/editor support to that tested baseline. The adapter uses internal HA contrib APIs;
+compatibility outside >=0.80.3 <0.82.0 is unsupported. Structural diagnostics
+are opt-in. Test with a development light before relying on this node.
 
-After this version is published, install it in your Node-RED user directory:
+To install this version from npm when available, run in your Node-RED user directory:
 
 ```sh
-npm install @johanwistbacka/node-red-contrib-sw-light@0.1.9
+npm install @johanwistbacka/node-red-contrib-sw-light@0.1.30
 ```
 
-After publication, the current development release is available under npm latest:
+To install the version currently published under npm latest:
 
 ```sh
 npm install @johanwistbacka/node-red-contrib-sw-light@latest
 ```
 
-This candidate has been prepared locally and is not published yet. Restart
-Node-RED after installation and verify the version in Palette Manager.
+Restart Node-RED after installation and verify the version in Palette Manager.
 
 Select/create a Home Assistant server using the existing HA contrib config
 node. A new server must be deployed before its entities are available in the
@@ -99,9 +248,18 @@ do not replace a working installation's versions without checking compatibility.
 
 For edits, use npm's local directory installation/link or reinstall an archive
 created with `npm pack`. Restart the isolated Node-RED runtime after changes.
-There is no build step or additional runtime dependency.
+There is no compilation step. Dynamic temperature uses the pinned SunCalc 2.1.1 runtime dependency.
 
-The current development release uses the normal SemVer version `0.1.9` and
+SunCalc 2 uses more accurate solar event times and returns `null` for absent polar
+sunrise/sunset events; SW Light handles those events explicitly. Its polar
+fallback retains the geometric noon-horizon rule despite SunCalc's new apparent
+altitude output. The configured
+Kelvin curve and command behavior are unchanged, although event times and
+calculated temperatures may differ slightly from releases using SunCalc 1.9.0.
+The HA contrib peer range remains limited to the verified 0.80.3/0.81.x APIs;
+0.82.0 has not been validated and is not automatically accepted.
+
+The current development release uses the normal SemVer version `0.1.30` and
 npm tag `latest` for Node-RED compatibility. This version remains experimental;
 it is not a SemVer prerelease. Every installation/publication candidate needs a
 unique version. Use `npm version patch --no-git-tag-version` for the next normal
@@ -113,26 +271,24 @@ After publication, submit the package through the
 [Node-RED Flow Library](https://flows.nodered.org/add/node), or request a refresh
 if it is already listed.
 
-## Temporary runtime diagnostics in 0.1.9
+## Temporary runtime diagnostics
 
-This build logs `[SW Light debug]` at construction and on the first input,
-then when the relevant structure/readiness changes. It reports version,
-server-ID presence, whether the server resolves, constructor/type checks,
-expected method/property presence, provider version and client readiness.
-It never logs server IDs, entity IDs, credentials, hosts, full objects or state
-snapshots. Provider initialization errors are reduced to a generic message.
+Structural diagnostics are **off by default**. To troubleshoot, start Node-RED
+with `SW_LIGHT_DEBUG=1` in its environment and restart the instance. This enables
+`[SW Light debug]` at construction and when relevant structure/readiness changes.
+It reports the package version, server-ID presence, method/property presence,
+provider version and client readiness. It does not log credentials, server IDs,
+entity IDs, hosts or full state snapshots through these structural messages.
+Ordinary node errors and output-2 diagnostic events remain available by default.
 
-After installation, restart Node-RED and verify a log line containing
-`[SW Light debug] version=0.1.9`. Inject once and retain the prefixed lines,
-along with any error/stack. Those lines distinguish missing configuration,
-a missing provider client and a connected client with unexpected methods.
-The real installation problem remains unverified until this build is tested
-there. Diagnostics are temporary and intended to be removed after diagnosis.
+Verify the installed version in Palette Manager. With diagnostics enabled,
+retain the prefixed lines and any relevant error/stack. Remove the environment
+setting and restart when troubleshooting is finished.
 
 The adapter follows the accessor used by official Current State and Action,
 using one Node module resolution anchored at `RED.settings.userDir`. HA contrib
-0.80.3 exposes no documented public third-party transport API or client method
-on its server config node. Its internal dependency remains isolated and pinned;
+0.80.3 and 0.81.0 expose no documented public third-party transport API or client method
+on their server config node. The internal dependency remains isolated and bounded;
 there is no `require.cache` scan or search for alternate package copies.
 
 ## Configuration
@@ -159,9 +315,12 @@ runtime validation is authoritative.
 
 Color modes: Adaptive Lighting, Keep current, Fixed Kelvin, Fixed mired, Lamp
 default, Fixed color (`#rrggbb`). Kelvin and mired are normalized to Kelvin,
-validated against the lamp's advertised limits and sent as
+clamped to the lamp's advertised minimum/maximum and sent as
 `color_temp_kelvin`. Fixed RGB translates to RGB, HS, XY, RGBW or RGBWW
-according to capabilities. White channels are zero when expanding RGB.
+according to capabilities. For example, 5000 K on a 2202–4000 K lamp sends
+4000 K. This applies to Fixed Kelvin, Fixed mired and explicit message values;
+invalid input remains an error. `sw_light.service_data.color_temp_kelvin` (or each
+aggregate member result) shows the sent value. White channels are zero when expanding RGB.
 White channels supplied explicitly are never silently discarded.
 
 Keep current and Lamp default both omit configured color in v0.1. They use
@@ -321,7 +480,7 @@ Adaptive Lighting, including sun/time and sleep settings.
 
 ### Real-world verification
 
-1. Install the local 0.1.9 archive, restart Node-RED, and verify its startup
+1. Install the local 0.1.30 archive, restart Node-RED, and verify its startup
    version. Use a test light with `color_temp` support. Connect both outputs to Debug.
 2. In HA, expose the profile's configuration attributes for automatic discovery
    (or select it under Advanced). Keep its main switch off, use color-temperature
@@ -353,14 +512,14 @@ Actual Adaptive Lighting version, exposed configuration, sleep behavior, lamp
 latency/rounding and the two-action race still require verification on your HA
 installation. Automated tests mock that service boundary, not its algorithm.
 
-## Test the updated 0.1.9 in your HA Node-RED installation
+## Test the updated 0.1.30 in your HA Node-RED installation
 
-1. Save/export your current test flow. Transfer the rebuilt local
-   `johanwistbacka-node-red-contrib-sw-light-0.1.9.tgz` to the Node-RED host. Check that HA contrib
-   is 0.80.3; do not upgrade it for this task.
+1. Save/export your current test flow. Transfer the frozen local
+   `johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz` to the Node-RED host. Check that HA contrib
+   is 0.80.3 or 0.81.0 (Node.js >=20 for 0.81.0).
 2. In a terminal for that Node-RED instance, find **User directory** in its
    startup log. Change to that directory (not a global npm directory) and run
-   `npm install ./johanwistbacka-node-red-contrib-sw-light-0.1.9.tgz --ignore-scripts --no-audit --no-fund`.
+   `npm install ./johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz --ignore-scripts --no-audit --no-fund`.
    Use the add-on's supported local package installation mechanism if its terminal
    does not expose that user directory/npm. Restart Node-RED/the Node-RED add-on
    and reload the editor so the updated runtime and HTML are both loaded.
@@ -391,7 +550,13 @@ These are manual acceptance steps, not evidence of a live deployment.
 Both outputs preserve original message properties. Only `sw_light` (output 1)
 or `sw_light_event` (output 2) is assigned by this node.
 
-Output 1 follows successful light service acknowledgement:
+For an Entity target, output 1 follows successful light service acknowledgement.
+For Multiple entities, Label, Area and Group it instead contains an aggregate
+with per-member results and succeeded/skipped/failed/manual counts, even when
+some or all members fail or are blocked. Output 2 reports individual events and
+can accompany that aggregate. Empty targets return an empty aggregate.
+
+Example Entity result:
 
 ```json
 {
@@ -431,8 +596,8 @@ resolution on the next input. Readiness observation begins with the first input.
 
 If a constructor stack shows `sw-light.js:54`, `ha-adapter.js:33` and
 `light.js:16`, it identifies the original 0.1.0 implementation, not this
-candidate. After installation, restart Node-RED and verify both Palette Manager
-and the startup debug version before interpreting a new runtime failure.
+candidate. After installation, restart Node-RED and verify Palette Manager
+and, if SW_LIGHT_DEBUG=1 is enabled, the startup debug version before interpreting a new runtime failure.
 
 
 Status distinguishes `CONFIG ERROR` (invalid/missing server or local config),
@@ -440,6 +605,14 @@ Status distinguishes `CONFIG ERROR` (invalid/missing server or local config),
 (missing, unknown or unavailable light). Blocked commands show
 `MANUAL · 100% · BLOCK ON/OFF`; completed commands show `AUTO · ON · 94%`
 or `AUTO · OFF` with the actual command level.
+
+Every displayed status ends with the date and time of its latest change,
+for example `AUTO · ON · 94% · 30/10 14:32:08` (`DD/MM HH:mm:ss`).
+The timestamp uses the Node-RED process's local timezone. It changes when the
+displayed text or status icon changes, including errors and aggregate statuses.
+Repeated observations and registry refreshes with identical status preserve the
+timestamp. It is not a live clock or confirmation of a physical lamp change;
+after a restart or deploy, the first status receives a new timestamp.
 
 Output 2 has a stable versioned event envelope:
 
@@ -456,7 +629,8 @@ Output 2 has a stable versioned event envelope:
 Types: `manual_override`, `override_released`, `unavailable`, `unsupported`,
 `warning`, `error`. Details include `reason`, `parameters`, `message`, `phase` as applicable.
 Unsupported parameters are omitted and the supported action still runs.
-Blocked commands emit only output 2. Invalid input and transport failures also
+A blocked Entity command emits only output 2; multi-target commands also return
+their aggregate on output 1. Invalid input and transport failures also
 call Node-RED `done(error)` for Catch-node handling. Connection/state events have
 no incoming message, so only the event property is supplied.
 
@@ -476,7 +650,9 @@ npm pack --dry-run
 ```
 
 Run these checks from the source checkout; test tooling is not included in the npm package.
-Tests use Node's built-in test runner without HA or npm dependencies. They cover
+Tests use Node's built-in test runner and the pinned SunCalc dependency. Most
+tests mock HA; optional integration tests use an isolated published HA contrib
+installation via `SW_LIGHT_HA_USER_DIR`. They cover
 numeric ranges, precedence, max/min, manual override, color translation,
 unsupported capabilities, one-shot adaptive discovery/fallback, runtime outputs,
 async errors, reconnect readiness and listener cleanup. The source checkout retains a separate development integration report; it is
@@ -485,8 +661,10 @@ own HA server and light before deploying them in a dev instance.
 
 ## Known limits and next steps
 
-- The actual installed Node-RED/HA/Adaptive Lighting versions and attributes
-  could not be inspected; compatibility outside the stated baseline is unverified.
+- Local Node-RED 5.0.7 and HA contrib 0.80.3 were inspected and exercised;
+  real HA restart recovery was verified with the explicit provider repair.
+  The actual HA core/Adaptive Lighting versions and external profile membership
+  were not established; compatibility outside the stated contrib baseline is unverified.
 - Service results contain cached state, without physical confirmation. Rapid
   relative commands and toggles can use stale state despite serial service calls.
 - A v0.1 raw state subscription receives all state changes and filters locally;
@@ -498,11 +676,11 @@ own HA server and light before deploying them in a dev instance.
   other color-space conversion are not implemented. ON/OFF lights remain usable
   without brightness/color capabilities.
 
-Before live use, test server selection/autocomplete, each lamp capability,
+Before relying on a new installation, test server selection/autocomplete, each lamp capability,
 external brightness changes, threshold/explicit release, adaptive one-shot behavior,
 long transitions, deletion/unavailability, reconnect and repeated redeployment
-in your real editor with a development light. No live deployment, global config
-change, npm publication or GitHub release is part of this implementation.
+in your real editor with a development light. Local test installation does not
+authorize npm publication or a GitHub release.
 
 Recommended v0.2: verify and add your installed HA contrib version to the
 adapter's tested compatibility matrix, then add state-confirmation/relative-command

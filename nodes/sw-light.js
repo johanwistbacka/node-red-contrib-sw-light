@@ -3,23 +3,28 @@ const light = require('../lib/light');
 const { createController } = require('../lib/controller');
 const { target, createTargetResolver, aggregateStatus } = require('../lib/targets');
 const { createAdapter } = require('../lib/ha-adapter');
+const { createStatusReporter } = require('../lib/status');
 
 module.exports = function register(RED, adapterFactory = createAdapter) {
-    // HA contrib 0.80.3's Label selector is bundled privately and its HTTP API
-    // has no labels endpoint. Reuse its authenticated shared transport here.
-    if (RED.httpAdmin && RED.auth) RED.httpAdmin.get('/sw-light/labels/:serverId', RED.auth.needsPermission('server.read'), async (req, res) => {
-        let handle;
-        try {
-            handle = adapterFactory(RED, req.params.serverId);
-            await handle.resolve();
-            res.json(await handle.labels());
-        } catch (error) { res.status(503).json({ error: error.message }); }
-        finally { await handle?.close(); }
-    });
+    // Reuse HA contrib's authenticated shared transport for registry selectors.
+    if (RED.httpAdmin && RED.auth) for (const registry of ['labels', 'areas']) {
+        RED.httpAdmin.get(`/sw-light/${registry}/:serverId`, RED.auth.needsPermission('server.read'), async (req, res) => {
+            let handle;
+            try {
+                handle = adapterFactory(RED, req.params.serverId);
+                await handle.resolve();
+                res.json(await handle[registry]());
+            } catch (error) { res.status(503).json({ error: error.message }); }
+            finally { await handle?.close(); }
+        });
+    }
     function SWLight(raw) {
         RED.nodes.createNode(this, raw);
         const node = this;
-        node.log?.(`[SW Light debug] version=${require('../package.json').version} constructor=created serverIdPresent=${Boolean(raw.server)}`);
+        const reportStatus = createStatusReporter(value => node.status(value));
+        const diagnosticsEnabled = process.env.SW_LIGHT_DEBUG === '1';
+        const diagnostic = detail => { if (diagnosticsEnabled) node.log?.(`[SW Light debug] ${detail}`); };
+        diagnostic(`version=${require('../package.json').version} constructor=created serverIdPresent=${Boolean(raw.server)}`);
         let c, configured, adapter, resolver, closed = false, ready = false, observerTimer, refreshTimer, registryTimer;
         let queue = Promise.resolve(), startup = Promise.resolve(), activeIds = [];
         const controllers = new Map();
@@ -29,11 +34,11 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
                 target: configured, timestamp: new Date().toISOString(), ...detail } }]);
         }
         function status() {
-            if (!closed && ready && configured?.type === 'label') node.status(aggregateStatus(activeIds.map(id => controllers.get(id).info())));
+            if (!closed && ready && configured?.type !== 'entity') reportStatus(aggregateStatus(activeIds.map(id => controllers.get(id).info()), configured.type));
         }
         function controller(id) {
             if (!controllers.has(id)) controllers.set(id, createController({ ...c, entityId: id }, adapter, {
-                send: node.send.bind(node), status: value => { if (!closed && configured.type === 'entity') node.status(value); }
+                send: node.send.bind(node), status: value => { if (!closed && configured.type === 'entity') reportStatus(value); }
             }, () => closed));
             return controllers.get(id);
         }
@@ -46,15 +51,19 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
             activeIds = ids;
             for (const id of ids) controller(id);
             for (const id of controllers.keys()) if (!ids.includes(id)) controllers.delete(id);
-            const observe = (state, id) => { if (!closed) { controllers.get(id || selected.id)?.observe(state); status(); } };
-            if (adapter.watch) await adapter.watch(ids, observe, connection, error => event('error', { message: error.message }));
+            const groupIds = resolver.groupIds();
+            const observe = (state, id) => {
+                if (groupIds.includes(id)) { scheduleRefresh(); return; }
+                if (!closed) { controllers.get(id || selected.id)?.observe(state); status(); }
+            };
+            if (adapter.watch) await adapter.watch([...ids, ...groupIds], observe, connection, error => event('error', { message: error.message }));
             else if (ids.length === 1) await adapter.subscribe(ids[0], state => observe(state, ids[0]), connection, error => event('error', { message: error.message }));
             for (const id of ids) controller(id).observe(adapter.state(id));
             status();
             return ids;
         }
         function scheduleRefresh() {
-            if (closed || configured?.type !== 'label') return;
+            if (closed || !['label', 'area', 'entities', 'group'].includes(configured?.type)) return;
             clearTimeout(refreshTimer);
             refreshTimer = setTimeout(() => {
                 queue = queue.then(async () => {
@@ -67,9 +76,10 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
         }
         function resolutionError(error, msg, send, selected = configured) {
             if (closed) return;
-            node.status({ fill: 'red', shape: 'ring', text: 'TARGET UNAVAILABLE' });
+            configured = selected;
+            reportStatus({ fill: 'red', shape: 'ring', text: 'TARGET UNAVAILABLE' });
             activeIds = [];
-            adapter?.watch?.([], () => {}, connection, failure => event('error', { message: failure.message }));
+            adapter?.watch?.(selected?.type === 'group' ? [...new Set([selected.id, ...resolver.groupIds()])].sort() : [], selected?.type === 'group' ? scheduleRefresh : () => {}, connection, failure => event('error', { message: failure.message }));
             event('target_resolution_failure', { message: error.message, target: selected }, msg, send);
         }
         function connection(value) {
@@ -80,14 +90,14 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
                 if (configured.type === 'entity') controllers.get(configured.id)?.observe(adapter.state(configured.id));
                 else if (!wasReady) scheduleRefresh();
             } else {
-                node.status({ fill: 'red', shape: 'ring', text: 'HA NOT READY' });
+                reportStatus({ fill: 'red', shape: 'ring', text: 'HA NOT READY' });
                 if (wasReady) event('unavailable', { reason: 'disconnected' });
             }
         }
         function startAdapter() {
-            adapter = adapterFactory(RED, c.server, undefined, detail => node.log?.(`[SW Light debug] ${detail}`));
+            adapter = adapterFactory(RED, c.server, undefined, diagnostic);
             resolver = createTargetResolver(adapter);
-            if (configured.type === 'label') adapter.onRegistryChange?.(scheduleRefresh);
+            if (['label', 'area'].includes(configured.type)) adapter.onRegistryChange?.(scheduleRefresh);
             registryTimer = setInterval(scheduleRefresh, 30000); registryTimer.unref?.();
             // Bind connection notifications even while Label registries are unavailable.
             startup = adapter.subscribe(configured.type === 'entity' ? configured.id : '',
@@ -112,10 +122,10 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
         }
         try {
             c = light.config(raw); configured = target(c);
-            node.status({ fill: 'red', shape: 'ring', text: 'HA NOT READY' });
+            reportStatus({ fill: 'red', shape: 'ring', text: 'HA NOT READY' });
             observerTimer = setTimeout(startObserving, 0); observerTimer.unref?.();
         } catch (error) {
-            node.status({ fill: 'red', shape: 'ring', text: 'CONFIG ERROR' });
+            reportStatus({ fill: 'red', shape: 'ring', text: 'CONFIG ERROR' });
             node.error(error.message); node.swLightError = error;
         }
         node.on('input', (msg, send, done) => {
@@ -127,7 +137,7 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
                     if (node.swLightError) throw node.swLightError;
                     const selected = target(c, msg.target);
                     if (!adapter) startAdapter();
-                    if (selected.type === 'label') adapter.onRegistryChange?.(scheduleRefresh);
+                    if (['label', 'area'].includes(selected.type)) adapter.onRegistryChange?.(scheduleRefresh);
                     if (adapter.resolve) await adapter.resolve();
                     if (closed) { done(); return; }
                     if (!adapter.connected()) throw light.fault('HA NOT READY: disconnected or loading states', 'unavailable');
@@ -155,7 +165,7 @@ module.exports = function register(RED, adapterFactory = createAdapter) {
                     status(); done();
                 } catch (error) {
                     event(error.eventType || 'error', { message: error.message, light_service_completed: false }, msg, send);
-                    if (!closed) node.status({ fill: 'red', shape: 'ring', text: error.eventType === 'config_error' ? 'CONFIG ERROR' :
+                    if (!closed) reportStatus({ fill: 'red', shape: 'ring', text: error.eventType === 'config_error' ? 'CONFIG ERROR' :
                         error.eventType === 'unavailable' ? 'HA NOT READY' : error.message });
                     done(error);
                 }

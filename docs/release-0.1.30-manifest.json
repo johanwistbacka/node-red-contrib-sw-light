@@ -1,0 +1,110 @@
+{
+  "name": "@johanwistbacka/node-red-contrib-sw-light",
+  "version": "0.1.30",
+  "archive": "/Users/johan/Documents/Projekt/Hass/node-red/node-red-contrib-sw-light/johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz",
+  "sha256": "8fbe924b229c0cae08c978c86aefd27d5d91f193cbe69d885fcb4b99dada38a9",
+  "integrity": "sha512-c8mc4jysNn2BJlS/mV5Fr0/sVG0bThY9D51S+JaBMQPSn+s1mZkDyIRHKvWxXULcAPkFlC2Lx4g9Fp/oJkXb0Q==",
+  "files": [
+    {
+      "path": "CHANGELOG.md",
+      "size": 18655,
+      "sha256": "0ec7aace7b2fba4f2f3979fde96ee0489f33323e7f415f90d22e713e12601541"
+    },
+    {
+      "path": "LICENSE",
+      "size": 1073,
+      "sha256": "54727c6176ad73c1c3f6c47b11339e5d491603ba69bf90937b48068cd6ba60c9"
+    },
+    {
+      "path": "README.md",
+      "size": 40391,
+      "sha256": "8804a46f34562b2296a1b78e93e41a2a192db36c9e1034c8d07b55ffa5eb4975"
+    },
+    {
+      "path": "docs/ha-registry-reconnect.md",
+      "size": 5344,
+      "sha256": "728630bc4ccbadc78a7964957419b6645649ad6216976ad1c67961bd4aeddfd2"
+    },
+    {
+      "path": "docs/labels.md",
+      "size": 15477,
+      "sha256": "ca3b8bbd787e492f419512b4172179d54aae7b98173163819aa739168ce921d3"
+    },
+    {
+      "path": "docs/solar-comparison.json",
+      "size": 63779,
+      "sha256": "48292b8d5819b333addd86339f5d250c8d7b3ec07e03012fdbd808eed8824c6d"
+    },
+    {
+      "path": "docs/solar-temperature.md",
+      "size": 15109,
+      "sha256": "474bcf84b8e4ab74ae50c8d003f45e6debf572bf41f562f600e6b8080bcb9522"
+    },
+    {
+      "path": "examples/basic.json",
+      "size": 3364,
+      "sha256": "c2ca8c83c3926b477ec9456812e468e9c35ff3d0325cc0ce2df552627c528f95"
+    },
+    {
+      "path": "examples/manual-adaptive.json",
+      "size": 4626,
+      "sha256": "8838c32b518e8a9a4aa85f669f770919c5df6a00c8c57873bf241b6fa87a0b84"
+    },
+    {
+      "path": "lib/adaptive.js",
+      "size": 2901,
+      "sha256": "4f758907d8f23d94092f7f13e4cd29f79208f2ce99713c7e2dcefde77a2c642b"
+    },
+    {
+      "path": "lib/controller.js",
+      "size": 10504,
+      "sha256": "9e8e1404ee69cba0963059631a1fa16be4ecfdbc855d8fcc6db8d580903ba8be"
+    },
+    {
+      "path": "lib/ha-adapter.js",
+      "size": 12502,
+      "sha256": "32e06c949bcb4202e446e3f8273ec9e25fbc04fbc8b568bcc23933e71f61fc68"
+    },
+    {
+      "path": "lib/light.js",
+      "size": 13980,
+      "sha256": "715ad0b6f3f320fa1d14f86a6affaafe594756c2a39ec6de42748deda163473c"
+    },
+    {
+      "path": "lib/solar-temperature.js",
+      "size": 3329,
+      "sha256": "255ba7593275fa1c2ba6ea87a68f149864089a9edc7eb6642611b227d60b626a"
+    },
+    {
+      "path": "lib/status.js",
+      "size": 933,
+      "sha256": "be5b71b118e5c1414e682848d7c5f2142c49ff2a94d288c53dd4e3eedb549d62"
+    },
+    {
+      "path": "lib/targets.js",
+      "size": 6921,
+      "sha256": "4ccb3cb4f022f1dbe862eb6d5b39e4b4c07cddd1857e6fa8bf2036024e488a0b"
+    },
+    {
+      "path": "nodes/sw-light.html",
+      "size": 29640,
+      "sha256": "1e288f98285207e96c4c46e49e0ab6adcb1e4b00158d10e9a76243d0bbe3487f"
+    },
+    {
+      "path": "nodes/sw-light.js",
+      "size": 10699,
+      "sha256": "31b7e6569ed3a8e14d8867a60fb159f452a3bf395d16df13858167fcc717beab"
+    },
+    {
+      "path": "package.json",
+      "size": 1739,
+      "sha256": "be1fd7931c66781dd3a09d1b8ea7c7d36e835967af177720ee63be7b6350d3dc"
+    },
+    {
+      "path": "scripts/patch-ha-registry-reconnect.js",
+      "size": 5124,
+      "sha256": "2050279c3b0de6f3162a4cba4bf7d3229a7ea4ae27fbd3aa7593ed83a5e56d97"
+    }
+  ],
+  "source_manifest_sha256": "bfeababc678556541e77c9a179bba487c05e4a72d881e5f90b165792bd3db1a9"
+}

@@ -8,7 +8,7 @@ const { createRequire } = require('node:module');
 const path = require('node:path');
 const { loadIntegration, createAdapter } = require('../lib/ha-adapter');
 
-test('published HA contrib 0.80.3 shared client, services and subscription signatures',
+test('published HA contrib shared client, services and subscription signatures',
     { skip: !process.env.SW_LIGHT_HA_USER_DIR }, async () => {
         const userDir = process.env.SW_LIGHT_HA_USER_DIR;
         const req = createRequire(path.join(userDir, 'package.json'));
@@ -22,7 +22,8 @@ test('published HA contrib 0.80.3 shared client, services and subscription signa
         ws.onClientStates({ 'light.example': { entity_id: 'light.example', state: 'off', attributes: {} } });
         ws.services = { light: { turn_on: {} } };
         let listener, unsubscribed = false;
-        ws.client = { haVersion: '2026.9.0', sendMessagePromise: async msg => { calls.push(msg); return {}; },
+        ws.client = { haVersion: '2026.9.0', sendMessagePromise: async msg => { calls.push(msg);
+            return msg.type === 'get_config' ? { latitude: 59.3293, longitude: 18.0686, time_zone: 'Europe/Stockholm' } : {}; },
             subscribeMessage: async (fn, wire, options) => { listener = fn;
                 assert.equal(wire.event_type, 'state_changed'); assert.equal(options.resubscribe, true);
                 return () => { unsubscribed = true; }; } };
@@ -42,6 +43,8 @@ test('published HA contrib 0.80.3 shared client, services and subscription signa
             assert.deepEqual(calls[0], { type: 'call_service', domain: 'light', service: 'turn_on', service_data: { brightness: 239 }, target: { entity_id: 'light.example' }, return_response: false });
             listener({ data: { entity_id: 'light.example', new_state: { entity_id: 'light.example', state: 'on' } } });
             assert.equal(adapter.state('light.example').state, 'on'); assert.equal(states.length, 1);
+            assert.deepEqual(await adapter.location(), { latitude: 59.3293, longitude: 18.0686, timezone: 'Europe/Stockholm' });
+            assert.deepEqual(calls.at(-1), { type: 'get_config' });
             await adapter.close(); assert.equal(unsubscribed, true);
             assert.equal(integration.homeAssistantConnections.get('sw-light-test-server'), ha);
         } finally { await adapter.close(); integration.homeAssistantConnections.delete('sw-light-test-server'); }
@@ -102,7 +105,7 @@ test('registered HA server constructor and SW Light work together without any HA
             node = new SWLight({ id: 'sw-light-lazy-node', type: 'sw-light', server: lazyServer.id, entityId: 'light.example', action: 'on' });
             assert.equal(integration.homeAssistantConnections.has(lazyServer.id), false);
             const notReady = await new Promise(resolve => node.emit('input', {}, () => {}, resolve));
-            assert.ok(notReady); assert.equal(node.statuses.at(-1).text, 'HA NOT READY'); assert.equal(calls.length, 1);
+            assert.ok(notReady); assert.match(node.statuses.at(-1).text, /^HA NOT READY · \d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/); assert.equal(calls.length, 1);
             const delayedClient = integration.homeAssistantConnections.get(lazyServer.id);
             delayedClient.websocket.connectionState = 1;
             delayedClient.websocket.onClientStates({ 'light.example': { entity_id: 'light.example', state: 'off', attributes: { supported_color_modes: ['brightness'] } } });
@@ -119,13 +122,13 @@ test('registered HA server constructor and SW Light work together without any HA
         } finally {
             if (node) await new Promise(resolve => node.emit('close', false, resolve));
             if (server) await new Promise(resolve => server.emit('close', false, resolve));
-            if (lazyServer) integration.closeHomeAssistant(lazyServer.id);
+            if (lazyServer) await integration.closeHomeAssistant(lazyServer.id);
             Websocket.prototype.connect = originalConnect; Websocket.prototype.close = originalClose;
             globals.setRED(previousRED);
         }
     });
 
-test('published 0.80.3 Websocket.send supports official Label registry lists and filtered state subscriptions',
+test('published HA contrib Websocket.send supports official Label registry lists and filtered state subscriptions',
     { skip: !process.env.SW_LIGHT_HA_USER_DIR }, async () => {
         const req = createRequire(path.join(process.env.SW_LIGHT_HA_USER_DIR, 'package.json'));
         const haReq = createRequire(req.resolve('node-red-contrib-home-assistant-websocket/package.json'));

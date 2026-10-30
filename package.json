@@ -1,8 +1,16 @@
 {
   "name": "@johanwistbacka/node-red-contrib-sw-light",
-  "version": "0.1.9",
+  "version": "0.1.30",
   "description": "Home Assistant light control with automatic brightness limits and manual override",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johanwistbacka/node-red-contrib-sw-light.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johanwistbacka/node-red-contrib-sw-light/issues"
+  },
+  "homepage": "https://github.com/johanwistbacka/node-red-contrib-sw-light#readme",
   "keywords": [
     "node-red",
     "home-assistant",
@@ -19,14 +27,19 @@
     }
   },
   "peerDependencies": {
-    "node-red-contrib-home-assistant-websocket": "0.80.3"
+    "node-red-contrib-home-assistant-websocket": ">=0.80.3 <0.82.0"
+  },
+  "bin": {
+    "sw-light-ha-registry": "scripts/patch-ha-registry-reconnect.js"
   },
   "files": [
     "nodes/sw-light.js",
     "nodes/sw-light.html",
     "lib/controller.js",
+    "lib/status.js",
     "lib/targets.js",
     "lib/light.js",
+    "lib/solar-temperature.js",
     "lib/adaptive.js",
     "lib/ha-adapter.js",
     "examples/basic.json",
@@ -34,7 +47,11 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
-    "docs/labels.md"
+    "docs/labels.md",
+    "docs/solar-temperature.md",
+    "docs/solar-comparison.json",
+    "scripts/patch-ha-registry-reconnect.js",
+    "docs/ha-registry-reconnect.md"
   ],
   "scripts": {
     "test": "node --test",
@@ -45,5 +62,8 @@
     "access": "public",
     "tag": "latest",
     "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "suncalc": "2.1.1"
   }
 }

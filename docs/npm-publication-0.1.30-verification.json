@@ -1,0 +1,16 @@
+{
+  "verified_at_utc": "2026-10-30T08:09:53.355071+00:00",
+  "version": "0.1.30",
+  "latest": "0.1.30",
+  "sha256": "8fbe924b229c0cae08c978c86aefd27d5d91f193cbe69d885fcb4b99dada38a9",
+  "sha1": "153849e761bd4c09d3acd3a5b18db084b707491c",
+  "integrity": "sha512-c8mc4jysNn2BJlS/mV5Fr0/sVG0bThY9D51S+JaBMQPSn+s1mZkDyIRHKvWxXULcAPkFlC2Lx4g9Fp/oJkXb0Q==",
+  "files_matched": 20,
+  "archive_matches_reviewed": true,
+  "dependencies": {
+    "suncalc": "2.1.1"
+  },
+  "peerDependencies": {
+    "node-red-contrib-home-assistant-websocket": ">=0.80.3 <0.82.0"
+  }
+}

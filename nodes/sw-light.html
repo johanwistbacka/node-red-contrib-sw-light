@@ -1,14 +1,27 @@
 <script type="text/javascript">
 (function () {
-    const ranges = { brightnessPct: [1,100], autoMaxPct: [1,100], minPct: [1,100], overrideThreshold: [1,100], transitionOn: [0,3600], transitionOff: [0,3600], kelvin: [1000,40000], mired: [25,1000] };
+    const dynamicDefaults = { dynamicMinKelvin: 2000, dynamicMaxKelvin: 5500 };
+    const ranges = { brightnessPct: [1,100], autoMaxPct: [1,100], minPct: [1,100], overrideThreshold: [1,100], transitionOn: [0,3600], transitionOff: [0,3600], kelvin: [1000,40000], dynamicMinKelvin: [1000,40000], dynamicMaxKelvin: [1000,40000], mired: [25,1000] };
+    function dynamicValue(key, value) {
+        return value === undefined || (typeof value === 'string' && !value.trim()) ? dynamicDefaults[key] : value;
+    }
     function numeric(key) {
         return function (value) {
+            // Missing or blank optional bounds use the same defaults as runtime.
+            if (key in dynamicDefaults) {
+                value = dynamicValue(key, value);
+                if (typeof value !== 'number' && typeof value !== 'string') return false;
+            }
             const n = Number(value), range = ranges[key];
             if (String(value).trim() === '' || !Number.isFinite(n) || n < range[0] || n > range[1]) return false;
-            if (key === 'kelvin' && !Number.isInteger(n)) return false;
+            if (['kelvin','dynamicMinKelvin','dynamicMaxKelvin'].includes(key) && !Number.isInteger(n)) return false;
             if (['brightnessPct','autoMaxPct','minPct'].includes(key)) {
                 const read = k => $('#node-input-' + k).length ? Number($('#node-input-' + k).val()) : Number(this[k]);
                 if (!(read('minPct') <= read('brightnessPct') && read('brightnessPct') <= read('autoMaxPct'))) return false;
+            }
+            if (['dynamicMinKelvin','dynamicMaxKelvin'].includes(key)) {
+                const read = k => Number(dynamicValue(k, typeof $ === 'function' && $('#node-input-' + k).length ? $('#node-input-' + k).val() : this[k]));
+                if (!(read('dynamicMinKelvin') <= read('dynamicMaxKelvin'))) return false;
             }
             return true;
         };
@@ -24,9 +37,12 @@
         defaults: {
             name: { value: '' }, server: { value: '', type: 'server', required: true },
             action: { value: 'msg', validate: v => ['on','off','toggle','msg'].includes(v) },
-            targetType: { value: 'entity', validate: v => ['entity','label'].includes(v) },
-            entityId: { value: '', validate: function (v) { return targetKind(this) === 'label' || /^light\.[a-z0-9_]+$/.test(v); } },
+            targetType: { value: 'entity', validate: v => v === undefined || ['entity','entities','label','area','group'].includes(v) },
+            entityId: { value: '', validate: function (v) { return targetKind(this) !== 'entity' || /^light\.[a-z0-9_]+$/.test(v); } },
             labelId: { value: '', validate: function (v) { return targetKind(this) !== 'label' || (typeof v === 'string' && v.trim().length > 0); } },
+            areaId: { value: '', validate: function (v) { return targetKind(this) !== 'area' || (typeof v === 'string' && v.trim().length > 0); } },
+            groupId: { value: '', validate: function (v) { return targetKind(this) !== 'group' || (typeof v === 'string' && /^(light|group)\.[a-z0-9_]+$/.test(v)); } },
+            entityIds: { value: [], validate: function (v) { return targetKind(this) !== 'entities' || (Array.isArray(v) && v.length > 0 && v.every(id => typeof id === 'string' && /^light\.[a-z0-9_]+$/.test(id))); } },
             brightnessPct: { value: 94, validate: numeric('brightnessPct') },
             autoMaxPct: { value: 94, validate: numeric('autoMaxPct') },
             minPct: { value: 1, validate: numeric('minPct') },
@@ -35,40 +51,66 @@
             manualOverride: { value: true }, overrideThreshold: { value: 98, validate: numeric('overrideThreshold') },
             overrideStrategy: { value: 'threshold' }, colorMode: { value: 'keep' },
             adaptiveEnabled: { value: false },
+            dynamicMinKelvin: { value: dynamicDefaults.dynamicMinKelvin, validate: numeric('dynamicMinKelvin') },
+            dynamicMaxKelvin: { value: dynamicDefaults.dynamicMaxKelvin, validate: numeric('dynamicMaxKelvin') },
             kelvin: { value: 2700, validate: numeric('kelvin') }, mired: { value: 370, validate: numeric('mired') },
             fixedColor: { value: '#ffffff', validate: v => /^#[0-9a-f]{6}$/i.test(v) },
             adaptiveEntity: { value: '', validate: v => !v || /^switch\.[a-z0-9_]+$/.test(v) },
         },
         oneditprepare: function () {
+            for (const key of Object.keys(dynamicDefaults)) {
+                const value = dynamicValue(key, this[key]), n = Number(value);
+                const input = $('#node-input-' + key).attr('type', 'text').attr('inputmode', 'numeric');
+                if ((typeof value !== 'number' && typeof value !== 'string') || !Number.isFinite(n) || !Number.isInteger(n) || n < 1000 || n > 40000) {
+                    // Number inputs erase malformed values; keep them visible and invalid
+                    // through Done rather than silently turning them into optional defaults.
+                    input.val(typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value));
+                } else input.val(n);
+            }
             if (this.colorMode === 'adaptive') {
                 $('#node-input-colorMode').val('keep');
                 $('#node-input-adaptiveEnabled').prop('checked', this.adaptiveApply === true);
             }
-            let states = {}, labels = [], request, labelRequest, generation = 0;
+            let states = {}, labels = [], areas = [], request, labelRequest, areaRequest, generation = 0;
             $('#node-input-targetType').val(this.targetType || 'entity');
-            const label = $('#node-input-labelId');
+            const label = $('#node-input-labelId'), area = $('#node-input-areaId'), group = $('#node-input-groupId');
+            const multiple = $('#node-input-entityIds'), addEntity = $('#sw-add-entity');
+            function populateEntities() {
+                const selected = multiple.val() || [];
+                const ids = [...new Set([...Object.keys(states).filter(id => /^light\.[a-z0-9_]+$/.test(id)), ...selected])].sort();
+                multiple.empty();
+                ids.forEach(id => $('<option>').val(id).text((states[id]?.attributes?.friendly_name || id) + ' (' + id + ')').appendTo(multiple));
+                multiple.val(selected);
+            }
+            (this.entityIds || []).forEach(id => $('<option>').val(id).text(id).appendTo(multiple));
+            multiple.val(this.entityIds || []);
             const entity = $('#node-input-entityId'), adaptive = $('#node-input-adaptiveEntity');
             function modesForLight() { return states[entity.val()]?.attributes?.supported_color_modes || []; }
             function update() {
-                const isLabel = $('#node-input-targetType').val() === 'label';
-                $('.sw-entity-target').toggle(!isLabel); $('.sw-label-target').toggle(isLabel);
+                const kind = $('#node-input-targetType').val(), isGroup = kind !== 'entity';
+                $('.sw-entity-target').toggle(kind === 'entity'); $('.sw-label-target').toggle(kind === 'label');
+                $('.sw-group-target').toggle(kind === 'group');
+                $('#sw-group-name').text(states[group.val()]?.attributes?.friendly_name || 'Select a light group or legacy group. Each member keeps its own override.');
+                $('.sw-area-target').toggle(kind === 'area'); $('.sw-entities-target').toggle(kind === 'entities');
+                $('#sw-area-name').text(areas.find(a => a.area_id === area.val())?.name || 'Select an Area or enter its stable ID.');
                 $('#sw-label-name').text(labels.find(l => l.label_id === label.val())?.name || 'Select a Label or enter its stable ID.');
                 const mode = $('#node-input-colorMode').val();
                 $('.sw-color-row').hide();
                 $('.sw-color-' + mode).show();
-                $('.sw-adaptive-row').toggle($('#node-input-adaptiveEnabled').prop('checked'));
+                $('.sw-legacy-adaptive').toggle(mode !== 'dynamic');
+                $('.sw-adaptive-row').toggle(mode !== 'dynamic' && $('#node-input-adaptiveEnabled').prop('checked'));
                 const profiles = Object.values(states).filter(s => s.entity_id.startsWith('switch.') &&
                     Array.isArray(s.attributes?.configuration?.lights) && s.attributes.configuration.lights.includes(entity.val()));
-                $('#sw-adaptive-info').text(isLabel ? 'A unique profile is discovered per light. Advanced selects one shared fallback; keep its main switch off.' : modesForLight().includes('color_temp') ?
+                $('#sw-adaptive-info').text(isGroup ? 'A unique profile is discovered per light. Advanced selects one shared fallback; keep its main switch off.' : modesForLight().includes('color_temp') ?
                     (profiles.length === 1 ? 'Profile found. Keep its main switch off for one-shot use.' :
                         'No unique profile found. Select a profile under Advanced.') : 'This light has no known color-temperature support. Normal ON still works.');
                 $('.sw-override-row').toggle($('#node-input-manualOverride').prop('checked'));
                 $('.sw-threshold-row').toggle($('#node-input-manualOverride').prop('checked') && $('#node-input-overrideStrategy').val() === 'threshold');
                 const s = states[entity.val()], modes = s && s.attributes && s.attributes.supported_color_modes;
-                $('#sw-capabilities').text(isLabel ? 'Capabilities and Adaptive Lighting profiles are evaluated per resolved light.' : modes ? 'Supported: ' + modes.join(', ') : 'Select a deployed server and light to read capabilities.');
+                $('#sw-capabilities').text(isGroup ? 'Capabilities and Adaptive Lighting profiles are evaluated per resolved light.' : modes ? 'Supported: ' + modes.join(', ') : 'Select a deployed server and light to read capabilities.');
                 // Disabled options reflect known capabilities, without discarding saved settings.
-                $('#node-input-colorMode option[value="kelvin"], #node-input-colorMode option[value="mired"]').prop('disabled', !isLabel && !!modes && !modes.includes('color_temp'));
-                $('#node-input-colorMode option[value="color"]').prop('disabled', !isLabel && !!modes && !modes.some(m => ['hs','xy','rgb','rgbw','rgbww'].includes(m)));
+                $('#node-input-colorMode option[value="kelvin"], #node-input-colorMode option[value="mired"]').prop('disabled', !isGroup && !!modes && !modes.includes('color_temp'));
+                $('#node-input-colorMode option[value="color"]').prop('disabled', !isGroup && !!modes && !modes.some(m => ['hs','xy','rgb','rgbw','rgbww'].includes(m)));
             }
             function source(domain) {
                 return function (req, respond) {
@@ -86,11 +128,35 @@
                     .map(l => ({ label: l.name + ' (' + l.label_id + ')', value: l.label_id })));
             }, select: function (_e, ui) { label.val(ui.item.value); update(); } });
             label.on('focus.swLight', function () { label.autocomplete('search', label.val()); });
+            area.autocomplete({ minLength: 0, source: function (req, respond) {
+                const term = req.term.toLowerCase();
+                respond(areas.filter(a => a.area_id.toLowerCase().includes(term) || a.name.toLowerCase().includes(term))
+                    .map(a => ({ label: a.name + ' (' + a.area_id + ')', value: a.area_id })));
+            }, select: function (_e, ui) { area.val(ui.item.value); update(); } });
+            area.on('focus.swLight', function () { area.autocomplete('search', area.val()); });
+            group.autocomplete({ minLength: 0, source: function (req, respond) {
+                const term = req.term.toLowerCase();
+                respond(Object.values(states).filter(s => /^(light|group)\./.test(s.entity_id) && Array.isArray(s.attributes?.entity_id) &&
+                    (s.entity_id.toLowerCase().includes(term) || String(s.attributes.friendly_name || '').toLowerCase().includes(term)))
+                    .map(s => ({ label: (s.attributes.friendly_name || s.entity_id) + ' (' + s.entity_id + ')', value: s.entity_id })));
+            }, select: function (_e, ui) { group.val(ui.item.value); update(); } });
+            group.on('focus.swLight', function () { group.autocomplete('search', group.val()); });
+            group.on('change.swLight', update);
+            addEntity.autocomplete({ minLength: 0, source: source('light') });
+            addEntity.on('focus.swLight', function () { addEntity.autocomplete('search', addEntity.val()); });
+            $('#sw-add-light').on('click.swLight', function (event) {
+                event.preventDefault();
+                const id = addEntity.val().trim();
+                if (!/^light\.[a-z0-9_]+$/.test(id)) { $('#sw-multiple-info').text('Enter a light entity ID.'); return; }
+                const selected = [...new Set([...(multiple.val() || []), id])];
+                if (!multiple.find('option').toArray().some(option => option.value === id)) $('<option>').val(id).text(id).appendTo(multiple);
+                multiple.val(selected).trigger('change'); addEntity.val(''); $('#sw-multiple-info').text('');
+            });
             adaptive.autocomplete({ minLength: 0, source: source('switch') });
             function load() {
                 generation++; const token = generation;
-                if (request) request.abort(); if (labelRequest) labelRequest.abort();
-                states = {}; labels = []; update();
+                if (request) request.abort(); if (labelRequest) labelRequest.abort(); if (areaRequest) areaRequest.abort();
+                states = {}; labels = []; areas = []; populateEntities(); update();
                 const server = $('#node-input-server').val();
                 if (!server || server === '_ADD_') return;
                 $('#sw-capabilities').text('Loading Home Assistant entities…');
@@ -98,17 +164,24 @@
                 labelRequest = $.getJSON('sw-light/labels/' + encodeURIComponent(server))
                     .done(function (data) { if (token === generation) { labels = Array.isArray(data) ? data : []; update(); } })
                     .fail(function (_xhr, status) { if (status !== 'abort' && token === generation) $('#sw-label-name').text('Server must be deployed and connected. A stable Label ID can also be entered directly.'); });
+                areaRequest = $.getJSON('sw-light/areas/' + encodeURIComponent(server))
+                    .done(function (data) { if (token === generation) { areas = Array.isArray(data) ? data : []; update(); } })
+                    .fail(function (_xhr, status) { if (status !== 'abort' && token === generation) $('#sw-area-name').text('Server must be deployed and connected. A stable Area ID can also be entered directly.'); });
                 request = $.getJSON('homeassistant/states/' + encodeURIComponent(server))
-                    .done(function (data) { if (token === generation) { states = data || {}; update(); } })
+                    .done(function (data) { if (token === generation) { states = data || {}; populateEntities(); update(); } })
                     .fail(function (_xhr, status) { if (status !== 'abort' && token === generation) $('#sw-capabilities').text('Server must be deployed and connected. Entity IDs can also be entered directly.'); });
             }
             $('#node-input-server').on('change.swLight', load);
             $('#node-input-targetType, #node-input-labelId, #node-input-colorMode, #node-input-adaptiveEnabled, #node-input-manualOverride, #node-input-overrideStrategy, #node-input-entityId').on('change.swLight', update);
+            area.on('change.swLight', update); multiple.on('change.swLight', update);
             entity.on('focus.swLight', function () { entity.autocomplete('search', entity.val()); });
             adaptive.on('focus.swLight', function () { adaptive.autocomplete('search', adaptive.val()); });
             this._swCleanup = function () {
-                generation++; if (request) request.abort(); if (labelRequest) labelRequest.abort();
+                generation++; if (request) request.abort(); if (labelRequest) labelRequest.abort(); if (areaRequest) areaRequest.abort();
                 $('#node-input-server, #node-input-targetType, #node-input-labelId, #node-input-colorMode, #node-input-adaptiveEnabled, #node-input-manualOverride, #node-input-overrideStrategy, #node-input-entityId, #node-input-adaptiveEntity').off('.swLight');
+                group.autocomplete('destroy'); group.off('.swLight');
+                area.autocomplete('destroy'); area.off('.swLight'); multiple.off('.swLight');
+                addEntity.autocomplete('destroy'); addEntity.off('.swLight'); $('#sw-add-light').off('.swLight');
                 label.autocomplete('destroy'); label.off('.swLight'); entity.autocomplete('destroy'); adaptive.autocomplete('destroy');
                 delete this._swCleanup;
             };
@@ -123,8 +196,12 @@
 <script type="text/html" data-template-name="sw-light">
     <div class="form-row"><label for="node-input-name"><i class="fa fa-tag"></i> Name</label><input id="node-input-name" type="text" placeholder="SW Light"></div>
     <div class="form-row"><label for="node-input-server"><i class="fa fa-server"></i> HA server</label><input id="node-input-server" type="text"></div>
-    <div class="form-row"><label for="node-input-targetType">Target</label><select id="node-input-targetType"><option value="entity">Entity</option><option value="label">Label</option></select></div>
+    <div class="form-row"><label for="node-input-targetType">Target</label><select id="node-input-targetType"><option value="entity">Entity</option><option value="entities">Multiple entities</option><option value="label">Label</option><option value="area">Area</option><option value="group">Group</option></select></div>
     <div class="form-row sw-label-target"><label for="node-input-labelId">Label</label><input id="node-input-labelId" type="text" placeholder="Stable Label ID"><p id="sw-label-name"></p></div>
+    <div class="form-row sw-group-target"><label for="node-input-groupId">Group</label><input id="node-input-groupId" type="text" placeholder="light.group_id or group.group_id"><p id="sw-group-name"></p></div>
+    <div class="form-row sw-area-target"><label for="node-input-areaId">Area</label><input id="node-input-areaId" type="text" placeholder="Stable Area ID"><p id="sw-area-name"></p></div>
+    <div class="form-row sw-entities-target"><label for="node-input-entityIds">Lights</label><select id="node-input-entityIds" multiple size="8" style="height:auto;width:70%"></select><p>Use Cmd/Ctrl-click to select several lights. Each selected light is controlled once.</p></div>
+    <div class="form-row sw-entities-target"><label for="sw-add-entity">Add by ID</label><input id="sw-add-entity" type="text" placeholder="light.entity_id" style="width:50%"><button type="button" id="sw-add-light" class="red-ui-button">Add light</button><p id="sw-multiple-info" role="status"></p></div>
     <div class="form-row sw-entity-target"><label for="node-input-entityId"><i class="fa fa-lightbulb-o"></i> Light</label><input id="node-input-entityId" type="text" placeholder="light.entity_id"></div>
     <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="on">On</option><option value="off">Off</option><option value="toggle">Toggle</option><option value="msg">From msg</option></select></div>
     <div class="form-tips" id="sw-capabilities" style="margin-bottom:16px"></div>
@@ -141,28 +218,41 @@
         <div class="form-row sw-threshold-row"><label for="node-input-overrideThreshold">Threshold %</label><input id="node-input-overrideThreshold" type="number" min="1" max="100" step="0.1"></div>
         <p class="sw-override-row">Automatic commands pause during override. Manual commands use <code>msg.source = "manual"</code>.</p>
     </fieldset>
-    <fieldset><legend>Color</legend>
-        <div class="form-row"><label for="node-input-colorMode">Mode</label><select id="node-input-colorMode"><option value="keep">Keep current</option><option value="kelvin">Fixed Kelvin</option><option value="mired">Fixed mired</option><option value="default">Lamp default</option><option value="color">Fixed color</option></select></div>
+    <fieldset><legend>Color temperature / color</legend>
+        <div class="form-row"><label for="node-input-colorMode">Mode</label><select id="node-input-colorMode"><option value="keep">Keep current</option><option value="dynamic">Dynamic (sun-based)</option><option value="kelvin">Fixed Kelvin</option><option value="mired">Fixed mired</option><option value="default">Lamp default</option><option value="color">Fixed color</option></select></div>
         <div class="form-row sw-color-row sw-color-kelvin"><label for="node-input-kelvin">Kelvin</label><input id="node-input-kelvin" type="number" min="1000" max="40000"></div>
         <div class="form-row sw-color-row sw-color-mired"><label for="node-input-mired">Mired</label><input id="node-input-mired" type="number" min="25" max="1000" step="0.1"></div>
         <div class="form-row sw-color-row sw-color-color"><label for="node-input-fixedColor">Color</label><input id="node-input-fixedColor" type="color"></div>
+        <div class="sw-color-row sw-color-dynamic">
+            <p>Uses Home Assistant's location on each On command, including when already on. Brightness changes while on keep its color temperature.</p>
+            <details><summary>Advanced: dynamic range</summary>
+                <div class="form-row"><label for="node-input-dynamicMinKelvin">Warmest Kelvin</label><input id="node-input-dynamicMinKelvin" type="text" inputmode="numeric"></div>
+                <div class="form-row"><label for="node-input-dynamicMaxKelvin">Coolest Kelvin</label><input id="node-input-dynamicMaxKelvin" type="text" inputmode="numeric"></div>
+            </details>
+        </div>
+        <details class="sw-legacy-adaptive"><summary>Legacy Adaptive Lighting compatibility</summary>
         <div class="form-row"><label for="node-input-adaptiveEnabled">Adaptive Lighting</label><input id="node-input-adaptiveEnabled" type="checkbox" style="width:auto"> On / Off</div>
         <p class="sw-adaptive-row" id="sw-adaptive-info"></p>
         <details class="sw-adaptive-row"><summary>Advanced: profile selection</summary>
             <div class="form-row"><label for="node-input-adaptiveEntity">Profile</label><input id="node-input-adaptiveEntity" type="text" placeholder="Automatic (unique light membership)"></div>
             <p>Select only when automatic discovery is unavailable or ambiguous. The profile's main switch must be off.</p>
         </details>
+        </details>
     </fieldset>
 </script>
 
 <script type="text/html" data-help-name="sw-light">
-    <p>Controls a Home Assistant Entity or Label directly: Trigger → SW Light → Home Assistant. No downstream HA Action node is required. Select On, Off, Toggle, or From msg. Toggle resolves the current state to turn_on or turn_off.</p>
-    <p>Entity is the default for existing flows. Label stores its stable ID and resolves current light members, including labeled devices and labeled area relationships. Each light retains its own override and capabilities. Label output 1 contains target, resolved_entity_ids, results and counts; status summarizes observed states. A failed member does not stop others. <code>msg.target = {type: "label", id: "label_id"}</code> or <code>{type: "entity", id: "light.example"}</code> overrides the configured target for one input. The latest target is observed until the next input.</p>
+    <p>Controls a Home Assistant Entity, Multiple entities, Label, Area or Group directly: Trigger → SW Light → Home Assistant. No downstream HA Action node is required. Select On, Off, Toggle, or From msg. Toggle resolves the current state to turn_on or turn_off.</p>
+    <p>Entity is the default for existing flows. Label stores its stable ID and resolves current light members, including labeled devices and labeled area relationships. Each light retains its own override and capabilities. Area resolves lights assigned directly or through their device, with explicit entity areas taking precedence. Multiple entities stores a list of light IDs. Group expands the entity_id membership of light groups and legacy group entities, including nested groups, to unique light members. Cycles and missing group membership fail closed. Group state changes refresh membership while idle. Group output 1 contains target, resolved_entity_ids, results and counts; status summarizes observed states. A failed member does not stop others. <code>msg.target = {type: "label", id: "label_id"}</code> or <code>{type: "entity", id: "light.example"}</code> or <code>{type: "area", id: "area_id"}</code> or <code>{type: "entities", ids: ["light.one", "light.two"]}</code> or <code>{type: "group", id: "light.group_id"}</code> overrides the configured target for one input. The latest target is observed until the next input.</p>
     <h3>Inputs</h3>
     <dl class="message-properties"><dt>action <span class="property-type">string</span></dt><dd>Required with From msg: <code>on</code>, <code>off</code>, or <code>toggle</code>. Falls back to <code>msg.auto_light.action</code> when msg.action is absent. Fixed Action settings ignore message actions.</dd><dt class="optional">source <span class="property-type">string</span></dt><dd><code>automatic</code> (default) or <code>manual</code>.</dd><dt class="optional">brightness_pct <span class="property-type">number</span></dt><dd>0–100. Automatic brightness is capped at the configured maximum.</dd><dt class="optional">transition <span class="property-type">number</span></dt><dd>Fade seconds, 0–3600, if supported.</dd><dt class="optional">manual_override <span class="property-type">boolean</span></dt><dd>Latch/release override with <code>source: "manual"</code>.</dd></dl>
     <h3>Outputs</h3><ol><li>Original message plus <code>msg.sw_light</code>: last observed HA state, action, service data, and override/adaptive information.</li><li>Original message plus <code>msg.sw_light_event</code>: version, type, entity_id, timestamp, and details.</li></ol>
+    <p>Status ends with the date and time of the latest displayed text or icon change (<code>DD/MM HH:mm:ss</code>), using the Node-RED process's local timezone. Identical status refreshes keep the timestamp. A restart or deploy starts a new timestamp; it does not confirm a physical lamp change.</p>
     <h3>Details</h3><p>Default on brightness/max 94%, minimum 1%, fade 1s. ON at 100% (brightness 255) always blocks automatic ON, OFF and Toggle. 94%, 95% and 99% do not trigger this guard. Threshold detection defaults to 98% (brightness 250 or above) and pauses automatic commands; explicit overrides can also pause automation. Lowering brightness below the threshold releases its flag; turning off releases all override flags. Manual commands bypass the automatic maximum. Explicit flags require explicit release or off.</p>
     <p>Top-level message properties override configuration. Brightness precedence: percent, byte, percent step, byte step. Color precedence: Kelvin, mired, RGBWW, RGBW, RGB, HS, XY, name. Invalid values produce errors; unsupported parameters emit an event and are omitted.</p>
+    <p>Dynamic (sun-based) uses HA location and a 2000–5500 K daylight curve, clamped to each lamp. Each On command calculates current CT, including manual commands and already-on lamps. Message color wins. Already-on brightness changes (brightness_pct, brightness, brightness_step_pct or brightness_step) keep CT; from OFF they also set initial solar CT. Non-CT lamps and missing location still turn on normally. No timer, global variable or Adaptive Lighting profile is needed. Advanced changes the warmest/coolest range. Keep current remains the default; saved modes retain their behavior. Dynamic bypasses legacy Adaptive Lighting even if its saved checkbox or message opt-in is enabled.</p>
     <p>Adaptive Lighting applies current color temperature once after automatic OFF → ON, with SW Light brightness and fade. Explicit message color wins; already-on brightness changes and manual commands never apply it. A unique profile is discovered automatically; Advanced selects a fallback. Keep its main switch off to prevent continuous control. Use a profile with color-temperature sleep color; RGB sleep profiles fall back with a warning. <code>msg.adaptive_lighting</code> overrides the checkbox for one command. Missing, ambiguous or running profiles emit a warning and retain normal configured color behavior. Keep current and lamp default both omit configured color and leave HA/device behavior in control.</p>
+    <p>Fixed Kelvin/mired and explicit message temperature clamp to each lamp's supported minimum/maximum. For example, 5000 K sends 4000 K on a lamp limited to 4000 K.</p>
+    <p>Output 1: <code>msg.sw_light</code>, command result for Entity or per-member aggregate for other targets, including failures/skips. Output 2: <code>msg.sw_light_event</code>, override, availability, unsupported parameters, warnings and errors. Both may emit for one command. Result state is the last observed HA state, not physical confirmation; <code>service_data</code> shows what was sent.</p>
     <p>Requires HA contrib 0.80.3. See package README for full contracts, examples and compatibility limitations.</p>
 </script>
