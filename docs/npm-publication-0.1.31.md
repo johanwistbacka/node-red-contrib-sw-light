@@ -36,3 +36,50 @@ Efter publicering ska registry-version/latest, nedladdade arkivbytes,
 GitHub-release/tagg/commit samt Node-RED Flow Library kontrolleras och resultatet
 läggas till i detta dokument. Att uppdateringen finns i katalogen innebär inte
 att den installerats i Johans Node-RED eller att live-HA är verifierat.
+
+## Genomförda Git-kontroller
+
+- Release-commit: `e4806a7d3c7f58f140aeff05d31d9179f3289628`, `Release 0.1.31`.
+- Annoterad tagg `v0.1.31` pekar på release-commiten, verifierat lokalt och på
+  remote efter push. Main pushades före taggen.
+- GitHub-release: https://github.com/johanwistbacka/node-red-contrib-sw-light/releases/tag/v0.1.31
+- Releasen är publicerad, inte draft eller prerelease, och verifierad som latest.
+- Arkiv och separat `.sha256`-fil finns som release assets. Ett nytt nedladdat
+  GitHub-arkiv har identisk SHA-256 med kandidaten. Samtliga 20 paketfiler i
+  release-commiten matchar kandidatmanifestet.
+- Befintliga ospårade historikdokument och TODO har inte lagts till i commiten.
+
+## npm-bekräftelse
+
+Publiceringskontot verifierades som `johanwistbacka`. Johan slutförde npm:s
+separata tvåfaktorsbekräftelse för publiceringen. CLI avslutades med status 0
+samt `+ @johanwistbacka/node-red-contrib-sw-light@0.1.31`, men meddelade att
+paketet behandlas innan det blir tillgängligt. Inget nytt publiceringsförsök
+eller ombyggnad görs under behandlingen. Den tillfälliga npm-konfigurationen
+med autentisering togs bort efter avslutat publiceringskommando.
+
+## Slutförd distributionskontroll
+
+Efter npm:s behandlingsfördröjning verifierades **0.1.31 som latest** direkt i
+registry. Det publicerade arkivet laddades ned och SHA-256 samt samtliga 20
+paketfiler matchar kandidaten. PeerDependency är `>=0.80.3 <0.84.0` även i det
+publicerade paketet. Fullständigt resultat finns i
+`npm-publication-0.1.31-verification.json`.
+
+Node-RED Flow Library uppdaterades genom dess Add node-formulär. Sidan bekräftade
+`Updated @johanwistbacka/node-red-contrib-sw-light (0.1.31)` och visar både paketets
+version och README som 0.1.31:
+https://flows.nodered.org/node/@johanwistbacka/node-red-contrib-sw-light
+
+npm-version:
+https://www.npmjs.com/package/@johanwistbacka/node-red-contrib-sw-light/v/0.1.31
+
+Releasen är publicerad och distributionsvägarna är verifierade. Node-RED kan
+hämta den uppdaterade paketversionen; en körande Palette Manager kan behöva
+uppdatera sin paketlista. Ingen kontroll eller installation i Johans aktiva
+Node-RED har utförts. Efter installation ska Node-RED startas om och editorn
+laddas om. Kända providerrisker och testbegränsningar är oförändrade.
+
+Förberedelsens changelog och rapporter beskriver det frysta paketets dåvarande
+status. Detta dokument redovisar det efterföljande uttryckliga godkännandet,
+publiceringen och efterkontrollerna. Inga publicerade paketbytes har ändrats.

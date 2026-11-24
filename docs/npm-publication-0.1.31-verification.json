@@ -1,0 +1,20 @@
+{
+  "version": "0.1.31",
+  "latest": "0.1.31",
+  "sha256": "59c9f3a021ef7b2de337a25129886b6fe6d239a5d5fab2af9a31f3e74785901e",
+  "integrity": "sha512-neAFe4xXfzdEBKLsL1DiHAC9quktFsP1mtNFgXe5OzS3/B0b46Q5EvHNLoKFbonz5eZWtQdCjYzvyi+XBzqTeQ==",
+  "tarball": "https://registry.npmjs.org/@johanwistbacka/node-red-contrib-sw-light/-/node-red-contrib-sw-light-0.1.31.tgz",
+  "fileCount": 20,
+  "allFilesMatch": true,
+  "peerDependencies": {
+    "node-red-contrib-home-assistant-websocket": ">=0.80.3 <0.84.0"
+  },
+  "releaseCommit": "e4806a7d3c7f58f140aeff05d31d9179f3289628",
+  "gitTag": "v0.1.31",
+  "githubRelease": "https://github.com/johanwistbacka/node-red-contrib-sw-light/releases/tag/v0.1.31",
+  "githubDownloadedArchiveMatches": true,
+  "nodeRedCatalogue": "https://flows.nodered.org/node/@johanwistbacka/node-red-contrib-sw-light",
+  "nodeRedCatalogueVersion": "0.1.31",
+  "nodeRedCatalogueUpdateConfirmation": "Updated @johanwistbacka/node-red-contrib-sw-light (0.1.31)",
+  "liveInstallationPerformed": false
+}
