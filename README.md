@@ -1,4 +1,4 @@
-# SW Light — v0.1.30
+# SW Light — v0.1.31
 
 A reusable Node-RED node for a Home Assistant `light.*` Entity, Multiple entities, Label, Area or Group. Select an
 existing HA server, select a target, deploy in a **development** environment,
@@ -14,6 +14,24 @@ and integration only. With a fixed Action, a normal timestamp Inject is enough.
 
 Report bugs and request support in the
 [GitHub issue tracker](https://github.com/johanwistbacka/node-red-contrib-sw-light/issues).
+
+## HA contrib compatibility in 0.1.31
+
+Accept HA contrib **>=0.80.3 <0.84.0**, including 0.82.0 and 0.83.0, in both
+npm peer resolution and the runtime adapter. This removes SW Light's peer-range
+conflict when installing packages alongside HA contrib 0.83.0.
+No light-command or output behavior changes.
+
+The provider's known registry disconnect defect also reproduces on 0.82.0 and
+0.83.0. The opt-in repair CLI remains restricted to 0.80.3/0.81.0 and refuses
+newer versions. API compatibility does not establish reliable HA restart recovery.
+
+**Dependency security:** reviewed HA contrib versions pin `jsonata@2.1.0`, which
+has known code-execution and resource-exhaustion advisories. SW Light does not
+evaluate JSONata, but the provider does. Use trusted expressions only; the lasting
+fix is a provider release using a patched JSONata version (at least 2.2.1 for
+these advisories). Do not use `npm audit fix --force` to downgrade the provider.
+See the [JSONata advisory](https://github.com/jsonata-js/jsonata/security/advisories/GHSA-2943-5xfg-gq5f).
 
 ## Status timestamps in 0.1.30
 
@@ -45,7 +63,7 @@ lights. Absolute and relative brightness commands preserve temperature while
 on. Explicit message color and manual override retain their precedence.
 
 For a local installation, use the uniquely versioned archive
-`johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz` and restart Node-RED.
+`johanwistbacka-node-red-contrib-sw-light-0.1.31.tgz` and restart Node-RED.
 
 ## Area and multiple entities since 0.1.16
 
@@ -192,7 +210,7 @@ or, with Node-RED stopped, run these commands in its user directory:
 
 ```sh
 npm uninstall node-red-contrib-sw-light
-npm install @johanwistbacka/node-red-contrib-sw-light@0.1.30
+npm install @johanwistbacka/node-red-contrib-sw-light@0.1.31
 ```
 
 Restart Node-RED and reload the editor. Existing flow nodes retain type
@@ -210,10 +228,11 @@ after provider updates. Installing SW Light alone does not patch the provider.
 
 
 Requires Node.js >=18.2.0, Node-RED >=3.1.1 and
-`node-red-contrib-home-assistant-websocket` **>=0.80.3 <0.82.0**. The adapter
+`node-red-contrib-home-assistant-websocket` **>=0.80.3 <0.84.0**. The adapter
 uses that package's internal shared-client module and has been checked against
-the published 0.80.3 and 0.81.0 packages. HA contrib 0.81.x requires Node.js >=20. It does not require the HA Node-RED companion integration.
-HA contrib itself requires Home Assistant >=2023.12. Label targets additionally
+the published 0.80.3, 0.81.0, 0.82.0 and 0.83.0 packages. HA contrib 0.81–0.83
+requires Node.js >=20. It does not require the HA Node-RED companion integration.
+HA contrib 0.80.3 requires Home Assistant >=2023.12; 0.81–0.83 document HA >=2024.3. Label targets additionally
 require HA >=2024.4 (the Label registry). Area targets fetch only entity, device
 and area registries and do not require the Label API. Numeric bounds and
 capabilities are read from the selected light.
@@ -222,13 +241,13 @@ This is an experimental development release. The 0.1.13 runtime was installed
 from its frozen archive and verified after restart in local Node-RED 5.0.7 with
 HA contrib 0.80.3 and the existing Home Assistant server. The new candidate adds
 Area, Multiple entities and Group runtime/editor support to that tested baseline. The adapter uses internal HA contrib APIs;
-compatibility outside >=0.80.3 <0.82.0 is unsupported. Structural diagnostics
+compatibility outside >=0.80.3 <0.84.0 is unsupported. Structural diagnostics
 are opt-in. Test with a development light before relying on this node.
 
 To install this version from npm when available, run in your Node-RED user directory:
 
 ```sh
-npm install @johanwistbacka/node-red-contrib-sw-light@0.1.30
+npm install @johanwistbacka/node-red-contrib-sw-light@0.1.31
 ```
 
 To install the version currently published under npm latest:
@@ -256,10 +275,12 @@ fallback retains the geometric noon-horizon rule despite SunCalc's new apparent
 altitude output. The configured
 Kelvin curve and command behavior are unchanged, although event times and
 calculated temperatures may differ slightly from releases using SunCalc 1.9.0.
-The HA contrib peer range remains limited to the verified 0.80.3/0.81.x APIs;
-0.82.0 has not been validated and is not automatically accepted.
+The HA contrib peer range and runtime guard accept >=0.80.3 <0.84.0.
+Published-provider integration tests cover 0.80.3, 0.81.0, 0.82.0 and 0.83.0,
+including read-only use of the shared state/service objects returned by 0.83.0.
+Live HA/device behavior on 0.82/0.83 has not been verified.
 
-The current development release uses the normal SemVer version `0.1.30` and
+The current development release uses the normal SemVer version `0.1.31` and
 npm tag `latest` for Node-RED compatibility. This version remains experimental;
 it is not a SemVer prerelease. Every installation/publication candidate needs a
 unique version. Use `npm version patch --no-git-tag-version` for the next normal
@@ -287,7 +308,7 @@ setting and restart when troubleshooting is finished.
 
 The adapter follows the accessor used by official Current State and Action,
 using one Node module resolution anchored at `RED.settings.userDir`. HA contrib
-0.80.3 and 0.81.0 expose no documented public third-party transport API or client method
+The reviewed 0.80–0.83 versions expose no documented public third-party transport API or client method
 on their server config node. The internal dependency remains isolated and bounded;
 there is no `require.cache` scan or search for alternate package copies.
 
@@ -480,7 +501,7 @@ Adaptive Lighting, including sun/time and sleep settings.
 
 ### Real-world verification
 
-1. Install the local 0.1.30 archive, restart Node-RED, and verify its startup
+1. Install the local 0.1.31 archive, restart Node-RED, and verify its startup
    version. Use a test light with `color_temp` support. Connect both outputs to Debug.
 2. In HA, expose the profile's configuration attributes for automatic discovery
    (or select it under Advanced). Keep its main switch off, use color-temperature
@@ -512,14 +533,14 @@ Actual Adaptive Lighting version, exposed configuration, sleep behavior, lamp
 latency/rounding and the two-action race still require verification on your HA
 installation. Automated tests mock that service boundary, not its algorithm.
 
-## Test the updated 0.1.30 in your HA Node-RED installation
+## Test the updated 0.1.31 in your HA Node-RED installation
 
 1. Save/export your current test flow. Transfer the frozen local
-   `johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz` to the Node-RED host. Check that HA contrib
-   is 0.80.3 or 0.81.0 (Node.js >=20 for 0.81.0).
+   `johanwistbacka-node-red-contrib-sw-light-0.1.31.tgz` to the Node-RED host. Check that HA contrib
+   is within >=0.80.3 <0.84.0 (Node.js >=20 for 0.81–0.83).
 2. In a terminal for that Node-RED instance, find **User directory** in its
    startup log. Change to that directory (not a global npm directory) and run
-   `npm install ./johanwistbacka-node-red-contrib-sw-light-0.1.30.tgz --ignore-scripts --no-audit --no-fund`.
+   `npm install ./johanwistbacka-node-red-contrib-sw-light-0.1.31.tgz --ignore-scripts --no-audit --no-fund`.
    Use the add-on's supported local package installation mechanism if its terminal
    does not expose that user directory/npm. Restart Node-RED/the Node-RED add-on
    and reload the editor so the updated runtime and HTML are both loaded.

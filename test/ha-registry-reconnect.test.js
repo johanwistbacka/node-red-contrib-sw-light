@@ -25,7 +25,20 @@ function fixture(t) {
     return { directory, file, backup: path.join(directory, 'backup'), peerDir: process.env.SW_LIGHT_HA_USER_DIR };
 }
 
-const optional = { skip: !process.env.SW_LIGHT_HA_USER_DIR };
+const providerVersion = process.env.SW_LIGHT_HA_USER_DIR && createRequire(
+    path.join(process.env.SW_LIGHT_HA_USER_DIR, 'package.json'))('node-red-contrib-home-assistant-websocket/package.json').version;
+const optional = { skip: !providerVersion ? 'No isolated provider installation' :
+    !['0.80.3', '0.81.0'].includes(providerVersion) && 'Repair remains limited to HA contrib 0.80.3/0.81.0' };
+
+test('registry repair refuses newer runtime-compatible providers without modifying files',
+    { skip: !providerVersion || ['0.80.3', '0.81.0'].includes(providerVersion) }, t => {
+        const f = fixture(t), original = fs.readFileSync(f.file);
+        for (const operation of [check, apply, restore]) {
+            assert.throws(() => operation(f.directory, f.backup), /Unverified HA provider/);
+            assert.deepEqual(fs.readFileSync(f.file), original);
+            assert.equal(fs.existsSync(f.backup), false);
+        }
+    });
 
 test('HA repair is byte-guarded, backed up, idempotent and reversibly scoped to its file', optional, t => {
     const f = fixture(t), original = fs.readFileSync(f.file, 'utf8');
@@ -127,6 +140,16 @@ function run(f, registry, mode) {
     return spawnSync(process.execPath, ['--unhandled-rejections=strict', '-e', scenario,
         f.directory, f.peerDir, registry, mode], { encoding: 'utf8', timeout: 5000 });
 }
+
+test('newer published providers retain the known registry disconnect defect',
+    { skip: !providerVersion || !['0.82.0', '0.83.0'].includes(providerVersion) }, t => {
+        const f = fixture(t);
+        for (const name of ['Area', 'Device', 'Entity', 'Floor', 'Label']) {
+            const result = run(f, name, 'disconnect');
+            assert.equal(result.status, 1, name + ' must reproduce the existing provider crash');
+            assert.match(result.stderr, /UnhandledPromiseRejection/);
+        }
+    });
 
 test('published registry refresh crashes before repair and recovers after repair for all five registries', optional, t => {
     const f = fixture(t);

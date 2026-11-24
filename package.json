@@ -1,6 +1,6 @@
 {
   "name": "@johanwistbacka/node-red-contrib-sw-light",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "Home Assistant light control with automatic brightness limits and manual override",
   "license": "MIT",
   "repository": {
@@ -27,7 +27,7 @@
     }
   },
   "peerDependencies": {
-    "node-red-contrib-home-assistant-websocket": ">=0.80.3 <0.82.0"
+    "node-red-contrib-home-assistant-websocket": ">=0.80.3 <0.84.0"
   },
   "bin": {
     "sw-light-ha-registry": "scripts/patch-ha-registry-reconnect.js"

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.31 — HA contrib 0.82/0.83 compatibility
+
+- Expand the npm peer dependency and runtime provider guard to >=0.80.3 <0.84.0, resolving SW Light's peer conflict with HA contrib 0.83.0.
+- Verify the published 0.80.3, 0.81.0, 0.82.0 and 0.83.0 shared-client APIs. Add version-boundary and immutable-provider-data regressions for target resolution, light commands, Adaptive Lighting, Dynamic Kelvin and editable outputs.
+- Keep the opt-in registry repair limited to 0.80.3/0.81.0, with explicit refusal tests for newer providers. The existing registry disconnect defect also reproduces on 0.82.0/0.83.0; no automatic provider patch.
+- Document the provider's existing vulnerable JSONata 2.1.0 dependency and Node.js >=20 requirement for 0.81–0.83. Light-command behavior and SW Light's direct dependencies are unchanged.
+- Prepared locally; not published or installed in a live environment.
+
 ## 0.1.30 — Date and time of the latest status change
 
 - Append the latest displayed status change date and time (`DD/MM HH:mm:ss`, Node-RED local timezone) to Entity and aggregate statuses, including errors. Preserve the timestamp on identical refreshes.

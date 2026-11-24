@@ -1,0 +1,130 @@
+{
+  "version": "0.1.31",
+  "baseCommit": "88cdc9108251924cd7c6807f6889b3ae2fce9988",
+  "branch": "main",
+  "sourceState": "uncommitted working tree; unrelated untracked historical documents preserved",
+  "reviewedTrackedDiffSha256": "fe9a2cd4883e06b4eae64559131cb31a68dc383581ee45eb07984ea4a3a202fc",
+  "archive": "johanwistbacka-node-red-contrib-sw-light-0.1.31.tgz",
+  "sha256": "59c9f3a021ef7b2de337a25129886b6fe6d239a5d5fab2af9a31f3e74785901e",
+  "integrity": "sha512-neAFe4xXfzdEBKLsL1DiHAC9quktFsP1mtNFgXe5OzS3/B0b46Q5EvHNLoKFbonz5eZWtQdCjYzvyi+XBzqTeQ==",
+  "files": [
+    {
+      "path": "LICENSE",
+      "size": 1073,
+      "sha256": "54727c6176ad73c1c3f6c47b11339e5d491603ba69bf90937b48068cd6ba60c9"
+    },
+    {
+      "path": "nodes/sw-light.html",
+      "size": 29640,
+      "sha256": "1e288f98285207e96c4c46e49e0ab6adcb1e4b00158d10e9a76243d0bbe3487f"
+    },
+    {
+      "path": "lib/adaptive.js",
+      "size": 2901,
+      "sha256": "4f758907d8f23d94092f7f13e4cd29f79208f2ce99713c7e2dcefde77a2c642b"
+    },
+    {
+      "path": "lib/controller.js",
+      "size": 10504,
+      "sha256": "9e8e1404ee69cba0963059631a1fa16be4ecfdbc855d8fcc6db8d580903ba8be"
+    },
+    {
+      "path": "lib/ha-adapter.js",
+      "size": 12524,
+      "sha256": "46edbec46d1edab38a73989b5aef717437c67f396c9c18dc8448ce2604ce5b82"
+    },
+    {
+      "path": "lib/light.js",
+      "size": 13980,
+      "sha256": "715ad0b6f3f320fa1d14f86a6affaafe594756c2a39ec6de42748deda163473c"
+    },
+    {
+      "path": "scripts/patch-ha-registry-reconnect.js",
+      "size": 5124,
+      "sha256": "2050279c3b0de6f3162a4cba4bf7d3229a7ea4ae27fbd3aa7593ed83a5e56d97"
+    },
+    {
+      "path": "lib/solar-temperature.js",
+      "size": 3329,
+      "sha256": "255ba7593275fa1c2ba6ea87a68f149864089a9edc7eb6642611b227d60b626a"
+    },
+    {
+      "path": "lib/status.js",
+      "size": 933,
+      "sha256": "be5b71b118e5c1414e682848d7c5f2142c49ff2a94d288c53dd4e3eedb549d62"
+    },
+    {
+      "path": "nodes/sw-light.js",
+      "size": 10699,
+      "sha256": "31b7e6569ed3a8e14d8867a60fb159f452a3bf395d16df13858167fcc717beab"
+    },
+    {
+      "path": "lib/targets.js",
+      "size": 6921,
+      "sha256": "4ccb3cb4f022f1dbe862eb6d5b39e4b4c07cddd1857e6fa8bf2036024e488a0b"
+    },
+    {
+      "path": "examples/basic.json",
+      "size": 3364,
+      "sha256": "c2ca8c83c3926b477ec9456812e468e9c35ff3d0325cc0ce2df552627c528f95"
+    },
+    {
+      "path": "examples/manual-adaptive.json",
+      "size": 4626,
+      "sha256": "8838c32b518e8a9a4aa85f669f770919c5df6a00c8c57873bf241b6fa87a0b84"
+    },
+    {
+      "path": "package.json",
+      "size": 1739,
+      "sha256": "148cf5a2c5e53c505169950f9cc0720897ed54de45cbe258dac66e5936aaa97c"
+    },
+    {
+      "path": "docs/solar-comparison.json",
+      "size": 63779,
+      "sha256": "48292b8d5819b333addd86339f5d250c8d7b3ec07e03012fdbd808eed8824c6d"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "size": 19551,
+      "sha256": "b480e8c796b279f6c01f9c65ae59ed3138dbd3ee68e5b034ec9fc86b9dec1e34"
+    },
+    {
+      "path": "docs/ha-registry-reconnect.md",
+      "size": 5757,
+      "sha256": "cf31b15aef30922460034aa69b2ef1d689bb4d9a1b259d29a90b0008c0ad7cb9"
+    },
+    {
+      "path": "docs/labels.md",
+      "size": 15477,
+      "sha256": "ca3b8bbd787e492f419512b4172179d54aae7b98173163819aa739168ce921d3"
+    },
+    {
+      "path": "README.md",
+      "size": 41673,
+      "sha256": "f7e5f1965ab8911980736acf73aac1d01de251c1bbbee189096e4893efaef4b3"
+    },
+    {
+      "path": "docs/solar-temperature.md",
+      "size": 15109,
+      "sha256": "474bcf84b8e4ab74ae50c8d003f45e6debf572bf41f562f600e6b8080bcb9522"
+    }
+  ],
+  "testHarness": {
+    "test/adapter.test.js": "0237c3c6de7c2041713e86f0e1e29fa0fd189fee8dd458125424aebb4ccda4d1",
+    "test/dynamic-runtime.test.js": "ecebac4e1b8cb3725dc48d4fa0dcbf41b33768076d7e6b8ed7f696464d118728",
+    "test/ha-registry-reconnect.test.js": "fc3132ea9e17a1c84b4f76d1bb15021cb258cdcd6e195b9d61b7b50bb1f086a3",
+    "test/label-adapter.test.js": "82827bb4a14b0e78241d622ef6ecd1a5e49e209c12ca8d604b5717d30812c8df",
+    "test/label-editor.test.js": "989fbf0b592cce19c8ed1f0507d980c2a34387c27ebc4ecdead3183c9ef6a47c",
+    "test/label-runtime.test.js": "ee0d688f0afcfdb7e00db332fd240096a65b6fc5d63ce804285d24cba57cb389",
+    "test/light.test.js": "978f9a7a70e355ce288c8b6fd914685975f91ac428a5d44ed681de9e1e9ff00e",
+    "test/node-red-integration.test.js": "39bd751750afefca574fcf97502ac9efd9533759295c36553a27130582c6e93b",
+    "test/observed-override.test.js": "f461abac249375a466dedd15780866d3494b4f0af966f52437f6004b733e706f",
+    "test/peer-compatibility.test.js": "45cdc64fc4c44b8cca4513a608a4dbb89b19d8120aa9defe0994c3fb14d53214",
+    "test/published-integration.test.js": "f451d14af2314799648d9c4582cd1f18b35bdeb49367cb321a79b053429b88fb",
+    "test/runtime.test.js": "eee71d7ab0d7e4d685b61cc819f576badc2d35e51da4c0a17a6ee810d399fae8",
+    "test/solar-temperature.test.js": "7a89b4709e12e110e25fbc418a80ad3057be82acc0891a8c9fa9e0fef84b1afd",
+    "test/startup.test.js": "da22697e79f5b925e998960480ed20cc3d552bde58a7b8cef96d21547c86dac9",
+    "test/status.test.js": "4e61b37f83db538fe876e22e7bcb89c76b3cdbb98ac0f6b1a8ecddacc82338e1",
+    "test/targets.test.js": "37388cdd5bec0eb49121c144c42d8091940631989b1f19a15f69f9c409719831"
+  }
+}

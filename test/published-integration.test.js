@@ -8,6 +8,67 @@ const { createRequire } = require('node:module');
 const path = require('node:path');
 const { loadIntegration, createAdapter } = require('../lib/ha-adapter');
 
+test('published provider data stays unchanged through targets, commands, Adaptive Lighting and output edits',
+    { skip: !process.env.SW_LIGHT_HA_USER_DIR }, async () => {
+        const req = createRequire(path.join(process.env.SW_LIGHT_HA_USER_DIR, 'package.json'));
+        const haReq = createRequire(req.resolve('node-red-contrib-home-assistant-websocket/package.json'));
+        const Websocket = haReq('./dist/homeAssistant/Websocket.js').default;
+        const { createController } = require('../lib/controller');
+        const { config } = require('../lib/light');
+        const { resolveTarget } = require('../lib/targets');
+        const freeze = value => {
+            if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
+            return value;
+        };
+        const states = freeze({
+            'light.example': { entity_id: 'light.example', state: 'off', attributes: {
+                brightness: 100, supported_color_modes: ['color_temp', 'rgb'], supported_features: 32,
+                min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6500, rgb_color: [10, 20, 30] } },
+            'group.room': { entity_id: 'group.room', state: 'off', attributes: { entity_id: ['light.example'] } },
+            'switch.profile': { entity_id: 'switch.profile', state: 'off', attributes: {
+                configuration: { lights: ['light.example'], sleep_rgb_or_color_temp: 'color_temp' } } }
+        });
+        const services = freeze({ light: { turn_on: {}, turn_off: {} }, adaptive_lighting: { apply: {} } });
+        const registries = freeze({ label: [{ label_id: 'cozy' }], area: [{ area_id: 'room' }], device: [],
+            entity: [{ entity_id: 'light.example', labels: ['cozy'], area_id: 'room' }] });
+        const before = structuredClone({ states, services, registries }), calls = [];
+        const ws = new Websocket({}, new EventEmitter());
+        ws.connectionState = 1; ws.onClientStates(states); ws.onClientServices(services);
+        ws.client = { haVersion: '2026.11.0', sendMessagePromise: async message => {
+            calls.push(message);
+            if (message.type === 'get_config') return { latitude: 59.3293, longitude: 18.0686, time_zone: 'Europe/Stockholm' };
+            const registry = /^config\/(label|area|device|entity)_registry\/list$/.exec(message.type);
+            return registry ? registries[registry[1]] : {};
+        } };
+        const adapter = createAdapter({ nodes: { getNode: () => ({ type: 'server', config: {} }) } }, 'selected',
+            { getHomeAssistant: () => ({ isConnected: true, websocket: ws, eventBus: new EventEmitter() }) });
+        try {
+            await adapter.resolve();
+            for (const target of [{ type: 'label', id: 'cozy' }, { type: 'area', id: 'room' }, { type: 'group', id: 'group.room' }]) {
+                assert.deepEqual(await resolveTarget(adapter, target), ['light.example']);
+            }
+            const node = { send: () => {}, status: () => {} };
+            const controller = createController(config({ server: 'selected', entityId: 'light.example',
+                action: 'msg', adaptiveEnabled: true }), adapter, node, () => false);
+            for (const action of ['on', 'off', 'toggle']) {
+                const result = await controller.execute({ action }, () => {});
+                assert.equal(result.outcome, 'succeeded');
+                result.color.rgb_color[0] = 255;
+                result.adaptive.candidates.push('switch.output_only');
+            }
+            assert.ok(calls.some(m => m.domain === 'adaptive_lighting' && m.service === 'apply'));
+            assert.ok(calls.some(m => m.domain === 'light' && m.service === 'turn_off'));
+            const dynamic = createController(config({ server: 'selected', entityId: 'light.example',
+                action: 'on', colorMode: 'dynamic' }), adapter, node, () => false,
+                () => Date.parse('2026-06-21T10:00:00Z'));
+            const result = await dynamic.execute({}, () => {});
+            assert.equal(result.outcome, 'succeeded');
+            assert.equal(result.dynamic_ct.applied, true);
+            assert.ok(calls.at(-1).service_data.color_temp_kelvin >= 2000);
+            assert.deepEqual({ states, services, registries }, before);
+        } finally { await adapter.close(); }
+    });
+
 test('published HA contrib shared client, services and subscription signatures',
     { skip: !process.env.SW_LIGHT_HA_USER_DIR }, async () => {
         const userDir = process.env.SW_LIGHT_HA_USER_DIR;

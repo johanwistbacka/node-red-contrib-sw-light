@@ -106,3 +106,11 @@ restart was not tested. An unpatched standard installation has not passed this
 same recovery test. The public repair workflow is supplied as the explicit
 installation step for the verified affected versions until a suitable upstream
 fix is verified.
+
+## Compatibility review — 2026-11-24
+
+The same published collections.js bytes and disconnect failure were verified on
+HA contrib 0.82.0 and 0.83.0. Runtime API compatibility in SW Light 0.1.31 does
+not fix this provider defect. The repair CLI still refuses those versions; do
+not relabel provider metadata to bypass its version guard. A separately reviewed
+repair or upstream fix is needed for those versions.

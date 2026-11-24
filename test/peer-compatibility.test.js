@@ -7,9 +7,9 @@ const path = require('node:path');
 const { loadIntegration } = require('../lib/ha-adapter');
 const PACKAGE = 'node-red-contrib-home-assistant-websocket';
 
-test('peer contract covers both reviewed HA contrib minors without a direct dependency', () => {
+test('peer contract covers all four reviewed HA contrib minors without a direct dependency', () => {
     const metadata = require('../package.json');
-    assert.equal(metadata.peerDependencies[PACKAGE], '>=0.80.3 <0.82.0');
+    assert.equal(metadata.peerDependencies[PACKAGE], '>=0.80.3 <0.84.0');
     assert.equal(metadata.dependencies?.[PACKAGE], undefined);
     assert.equal(require('../package-lock.json').packages[''].peerDependencies[PACKAGE], metadata.peerDependencies[PACKAGE]);
 });
@@ -17,7 +17,9 @@ test('peer contract covers both reviewed HA contrib minors without a direct depe
 for (const [version, supported] of [
     ['0.80.2', false], ['0.80.3', true], ['0.80.4', true],
     ['0.81.0', true], ['0.81.1', true], ['0.81.0-beta.1', false],
-    ['0.82.0', false], ['1.0.0', false]
+    ['0.82.0', true], ['0.82.1', true], ['0.83.0', true], ['0.83.1', true],
+    ['0.83.0-beta.1', false], ['0.83.0+local', false], ['0.83.01', false],
+    ['0.84.0-beta.1', false], ['0.84.0', false], ['1.0.0', false]
 ]) {
     test(`runtime provider version guard: ${version} ${supported ? 'accepted' : 'rejected'}`, t => {
         const userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sw-light-peer-'));
